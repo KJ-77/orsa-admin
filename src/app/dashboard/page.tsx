@@ -30,7 +30,8 @@ export default function Page() {
               <div className="px-4 lg:px-6">
                 <ChartAreaInteractive />
               </div>
-              <DataTable data={data} />
+              {/* GET orders http request */}
+              <DataTable data={data} apiUrl="https://rlg7ahwue7.execute-api.eu-west-3.amazonaws.com/orders" /> 
             </div>
           </div>
         </div>
