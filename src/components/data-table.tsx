@@ -127,11 +127,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 // It's used for type safety and validation throughout the component
 export const schema = z.object({
   id: z.number(), // Unique identifier for each row
-  name: z.string(), // Product name
-  price: z.number(), // Product price (numeric for calculations)
-  status: z.string(), // Status (e.g., "Completed", "In Progress")
-  dateOrdered: z.string(), // Date when ordered (as string)
-  country: z.string(), // Country information
+  user_name: z.string(), // Customer name
+  total_price: z.number(), // Order total price (numeric for calculations)
+  order_status: z.string(), // Order status
+  created_at: z.string(), // Date when ordered (ISO date string)
+  user_location: z.string(), // Customer location
+  email: z.string(), // Customer email
 });
 
 // ------x------
@@ -196,48 +197,59 @@ const columns: ColumnDef<z.infer<typeof schema>>[] = [
     enableHiding: false,
   },
   {
-    accessorKey: "name",
-    header: "Name",
+    accessorKey: "user_name",
+    header: "Customer Name",
     cell: ({ row }) => {
       return <TableCellViewer item={row.original} />;
     },
     enableHiding: false,
   },
   {
-    accessorKey: "price",
-    header: "Price",
+    accessorKey: "email",
+    header: "Email",
+    cell: ({ row }) => <div className="font-medium">{row.original.email}</div>,
+  },
+  {
+    accessorKey: "total_price",
+    header: "Total Price",
     cell: ({ row }) => (
       <div
         className="text-right font-medium"
-        onClick={() => toast(`Price: $${row.original.price.toFixed(2)}`)}
+        onClick={() =>
+          toast(`Total Price: $${row.original.total_price.toFixed(2)}`)
+        }
       >
-        ${row.original.price.toFixed(2)}
+        ${row.original.total_price.toFixed(2)}
       </div>
     ),
   },
   {
-    accessorKey: "status",
-    header: "Status",
+    accessorKey: "order_status",
+    header: "Order Status",
     cell: ({ row }) => (
       <Badge variant="outline" className="text-muted-foreground px-1.5">
-        {row.original.status === "Completed" ? (
+        {row.original.order_status === "Completed" ? (
           <IconCircleCheckFilled className="fill-green-500 dark:fill-green-400" />
         ) : (
           <IconLoader />
         )}
-        {row.original.status}
+        {row.original.order_status || "Pending"}
       </Badge>
     ),
   },
   {
-    accessorKey: "dateOrdered",
+    accessorKey: "created_at",
     header: "Date Ordered",
-    cell: ({ row }) => <div>{row.original.dateOrdered}</div>,
+    cell: ({ row }) => {
+      // Format the ISO date string to a more readable format
+      const date = new Date(row.original.created_at);
+      return <div>{date.toLocaleDateString()}</div>;
+    },
   },
   {
-    accessorKey: "country",
-    header: "Country",
-    cell: ({ row }) => <div>{row.original.country}</div>,
+    accessorKey: "user_location",
+    header: "Location",
+    cell: ({ row }) => <div>{row.original.user_location}</div>,
   },
   {
     id: "actions",
@@ -316,11 +328,12 @@ export function DataTable({
         // Single test row for when no data is provided
         {
           id: 1,
-          name: "Test Product",
-          price: 99.99,
-          status: "Completed",
-          dateOrdered: "2025-05-15",
-          country: "USA",
+          user_name: "Test Customer",
+          total_price: 99.99,
+          order_status: "Completed",
+          created_at: "2025-05-15T10:30:00.000Z",
+          user_location: "Test Location",
+          email: "test@example.com",
         },
       ]
   );
@@ -360,20 +373,22 @@ export function DataTable({
         if (!response.ok) {
           throw new Error(`API request failed with status ${response.status}`);
         }
-
         const apiData = await response.json();
 
         // Transform the API data to match your schema
-        // This handles potential differences in field names and data types
+        // We extract only the fields we need from the API response
         const transformedData = apiData.map(
           (item: Record<string, unknown>) => ({
             id: item.id as number,
-            name: item.name as string,
-            price: parseFloat(item.price as string),
-            status: item.status as string,
-            dateOrdered:
-              (item.dateOrdered as string) || (item.date_ordered as string), // Handle different field naming conventions
-            country: item.country as string,
+            user_name: item.user_name as string,
+            total_price:
+              typeof item.total_price === "string"
+                ? parseFloat(item.total_price)
+                : (item.total_price as number),
+            order_status: (item.order_status as string) || "Pending", // Default to "Pending" if empty
+            created_at: item.created_at as string,
+            user_location: item.user_location as string,
+            email: item.email as string,
           })
         );
 
@@ -709,15 +724,16 @@ function TableCellViewer({ item }: { item: z.infer<typeof schema> }) {
 
   return (
     <Drawer direction={isMobile ? "bottom" : "right"}>
+      {" "}
       <DrawerTrigger asChild>
         <Button variant="link" className="text-foreground w-fit px-0 text-left">
-          {item.name}
+          {item.user_name}
         </Button>
       </DrawerTrigger>
       <DrawerContent>
         <DrawerHeader className="gap-1">
-          <DrawerTitle>{item.name}</DrawerTitle>
-          <DrawerDescription>Product details</DrawerDescription>
+          <DrawerTitle>{item.user_name}</DrawerTitle>
+          <DrawerDescription>Order details</DrawerDescription>
         </DrawerHeader>
         <div className="flex flex-col gap-4 overflow-y-auto px-4 text-sm">
           {!isMobile && (
@@ -776,39 +792,50 @@ function TableCellViewer({ item }: { item: z.infer<typeof schema> }) {
               </div>
               <Separator />
             </>
-          )}
+          )}{" "}
           <form className="flex flex-col gap-4">
             <div className="flex flex-col gap-3">
-              <Label htmlFor="name">Name</Label>
-              <Input id="name" defaultValue={item.name} />
+              <Label htmlFor="customer-name">Customer Name</Label>
+              <Input id="customer-name" defaultValue={item.user_name} />
+            </div>
+            <div className="flex flex-col gap-3">
+              <Label htmlFor="email">Email</Label>
+              <Input id="email" defaultValue={item.email} />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="flex flex-col gap-3">
-                <Label htmlFor="price">Price</Label>
-                <Input id="price" defaultValue={item.price.toString()} />
+                <Label htmlFor="total-price">Total Price</Label>
+                <Input
+                  id="total-price"
+                  defaultValue={item.total_price.toString()}
+                />
               </div>
               <div className="flex flex-col gap-3">
-                <Label htmlFor="status">Status</Label>
-                <Select defaultValue={item.status}>
-                  <SelectTrigger id="status" className="w-full">
+                <Label htmlFor="order-status">Order Status</Label>
+                <Select defaultValue={item.order_status || "Pending"}>
+                  <SelectTrigger id="order-status" className="w-full">
                     <SelectValue placeholder="Select a status" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="Completed">Completed</SelectItem>
                     <SelectItem value="In Progress">In Progress</SelectItem>
-                    <SelectItem value="Not Started">Not Started</SelectItem>
+                    <SelectItem value="Pending">Pending</SelectItem>
+                    <SelectItem value="Cancelled">Cancelled</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="flex flex-col gap-3">
-                <Label htmlFor="dateOrdered">Date Ordered</Label>
-                <Input id="dateOrdered" defaultValue={item.dateOrdered} />
+                <Label htmlFor="created-at">Date Ordered</Label>
+                <Input
+                  id="created-at"
+                  defaultValue={new Date(item.created_at).toLocaleDateString()}
+                />
               </div>
               <div className="flex flex-col gap-3">
-                <Label htmlFor="country">Country</Label>
-                <Input id="country" defaultValue={item.country} />
+                <Label htmlFor="location">Location</Label>
+                <Input id="location" defaultValue={item.user_location} />
               </div>
             </div>
           </form>
