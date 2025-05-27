@@ -93,6 +93,15 @@ import {
   DrawerTrigger,
 } from "@/components/ui/drawer";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
@@ -160,11 +169,400 @@ function DragHandle({ id }: { id: number }) {
 }
 
 // ------x------
+// ACTIONS CELL COMPONENT
+// ------x------
+// This component handles the dropdown menu actions for each row
+// It includes confirmation dialogs for destructive actions
+function ActionsCell({
+  row,
+  onRefresh,
+}: {
+  row: Row<z.infer<typeof schema>>;
+  onRefresh: () => void;
+}) {
+  const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false);
+  const [completeDialogOpen, setCompleteDialogOpen] = React.useState(false);
+  const [editDrawerOpen, setEditDrawerOpen] = React.useState(false);
+  const [isDeleting, setIsDeleting] = React.useState(false);
+  const [isUpdating, setIsUpdating] = React.useState(false);
+  const [isSubmitting, setIsSubmitting] = React.useState(false);
+
+  const handleDelete = async () => {
+    setIsDeleting(true);
+    try {
+      const response = await fetch(
+        `https://rlg7ahwue7.execute-api.eu-west-3.amazonaws.com/orders/${row.original.id}`,
+        {
+          method: "DELETE",
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(
+          `Failed to delete order: ${response.status} ${response.statusText}`
+        );
+      }
+
+      toast.success(`Order #${row.original.id} has been deleted`);
+      setDeleteDialogOpen(false);
+      onRefresh(); // Refresh the data to reflect the deletion
+    } catch (error) {
+      toast.error("Failed to delete order");
+      console.error("Delete error:", error);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const handleMarkComplete = async () => {
+    setIsUpdating(true);
+    try {
+      const response = await fetch(
+        `https://rlg7ahwue7.execute-api.eu-west-3.amazonaws.com/orders/${row.original.id}`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            user_name: row.original.user_name,
+            user_location: row.original.user_location,
+            order_status: "Completed",
+            total_price: row.original.total_price,
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(
+          `Failed to update order: ${response.status} ${response.statusText}`
+        );
+      }
+
+      toast.success(`Order #${row.original.id} marked as complete`);
+      setCompleteDialogOpen(false);
+      onRefresh(); // Refresh the data to reflect the status change
+    } catch (error) {
+      toast.error("Failed to update order status");
+      console.error("Update error:", error);
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleEditSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+
+    try {
+      const formData = new FormData(e.currentTarget);
+      const updates = {
+        user_name: formData.get("customer-name") as string,
+        user_location: formData.get("location") as string,
+        order_status: formData.get("order-status") as string,
+        total_price: parseFloat(formData.get("total-price") as string),
+      };
+
+      const response = await fetch(
+        `https://rlg7ahwue7.execute-api.eu-west-3.amazonaws.com/orders/${row.original.id}`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(updates),
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(
+          `Failed to update order: ${response.status} ${response.statusText}`
+        );
+      }
+
+      toast.success(`Order #${row.original.id} has been updated`);
+      setEditDrawerOpen(false);
+      onRefresh(); // Refresh the data to reflect the changes
+    } catch (error) {
+      toast.error("Failed to update order");
+      console.error("Update error:", error);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const isMobile = useIsMobile();
+
+  return (
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="ghost"
+            className="data-[state=open]:bg-muted text-muted-foreground flex size-8"
+            size="icon"
+          >
+            <IconDotsVertical />
+            <span className="sr-only">Open menu</span>
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-40">
+          <DropdownMenuItem onClick={() => setEditDrawerOpen(true)}>
+            Edit
+          </DropdownMenuItem>
+
+          <Dialog
+            open={completeDialogOpen}
+            onOpenChange={setCompleteDialogOpen}
+          >
+            <DialogTrigger asChild>
+              <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
+                Mark as Complete
+              </DropdownMenuItem>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Mark Order as Complete</DialogTitle>
+                <DialogDescription>
+                  Are you sure you want to mark order #{row.original.id} for{" "}
+                  {row.original.user_name} as complete? This action cannot be
+                  undone.
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  onClick={() => setCompleteDialogOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button onClick={handleMarkComplete} disabled={isUpdating}>
+                  {isUpdating ? "Updating..." : "Mark Complete"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          <DropdownMenuSeparator />
+
+          <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+            <DialogTrigger asChild>
+              <DropdownMenuItem
+                variant="destructive"
+                onSelect={(e) => e.preventDefault()}
+              >
+                Delete
+              </DropdownMenuItem>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Delete Order</DialogTitle>
+                <DialogDescription>
+                  Are you sure you want to delete order #{row.original.id} for{" "}
+                  {row.original.user_name}? This action cannot be undone.
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  onClick={() => setDeleteDialogOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={handleDelete}
+                  disabled={isDeleting}
+                >
+                  {isDeleting ? "Deleting..." : "Delete"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      {/* Edit Drawer */}
+      <Drawer
+        direction={isMobile ? "bottom" : "right"}
+        open={editDrawerOpen}
+        onOpenChange={setEditDrawerOpen}
+      >
+        <DrawerContent>
+          <DrawerHeader className="gap-1">
+            <DrawerTitle>{row.original.user_name}</DrawerTitle>
+            <DrawerDescription>Order details</DrawerDescription>
+          </DrawerHeader>
+          <div className="flex flex-col gap-4 overflow-y-auto px-4 text-sm">
+            {!isMobile && (
+              <>
+                <ChartContainer config={chartConfig}>
+                  <AreaChart
+                    accessibilityLayer
+                    data={chartData}
+                    margin={{
+                      left: 0,
+                      right: 10,
+                    }}
+                  >
+                    <CartesianGrid vertical={false} />
+                    <XAxis
+                      dataKey="month"
+                      tickLine={false}
+                      axisLine={false}
+                      tickMargin={8}
+                      tickFormatter={(value) => value.slice(0, 3)}
+                      hide
+                    />
+                    <ChartTooltip
+                      cursor={false}
+                      content={<ChartTooltipContent indicator="dot" />}
+                    />
+                    <Area
+                      dataKey="mobile"
+                      type="natural"
+                      fill="var(--color-mobile)"
+                      fillOpacity={0.6}
+                      stroke="var(--color-mobile)"
+                      stackId="a"
+                    />
+                    <Area
+                      dataKey="desktop"
+                      type="natural"
+                      fill="var(--color-desktop)"
+                      fillOpacity={0.4}
+                      stroke="var(--color-desktop)"
+                      stackId="a"
+                    />
+                  </AreaChart>
+                </ChartContainer>
+                <Separator />
+                <div className="grid gap-2">
+                  <div className="flex gap-2 leading-none font-medium">
+                    Trending up by 5.2% this month{" "}
+                    <IconTrendingUp className="size-4" />
+                  </div>
+                  <div className="text-muted-foreground">
+                    Showing total visitors for the last 6 months. This is just
+                    some random text to test the layout. It spans multiple lines
+                    and should wrap around.
+                  </div>
+                </div>
+                <Separator />
+              </>
+            )}{" "}
+            <form className="flex flex-col gap-4" onSubmit={handleEditSubmit}>
+              <div className="flex flex-col gap-3">
+                <Label htmlFor="customer-name">Customer Name</Label>
+                <Input
+                  id="customer-name"
+                  name="customer-name"
+                  defaultValue={row.original.user_name}
+                />
+              </div>
+              <div className="flex flex-col gap-3">
+                <Label htmlFor="email">Email</Label>
+                <Input
+                  id="email"
+                  name="email"
+                  defaultValue={row.original.email}
+                  disabled
+                  className="opacity-50"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Email cannot be modified
+                </p>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="flex flex-col gap-3">
+                  <Label htmlFor="total-price">Total Price</Label>
+                  <Input
+                    id="total-price"
+                    name="total-price"
+                    type="number"
+                    step="0.01"
+                    defaultValue={row.original.total_price.toString()}
+                  />
+                </div>
+                <div className="flex flex-col gap-3">
+                  <Label htmlFor="order-status">Order Status</Label>
+                  <Select
+                    name="order-status"
+                    defaultValue={row.original.order_status || "Pending"}
+                  >
+                    <SelectTrigger id="order-status" className="w-full">
+                      <SelectValue placeholder="Select a status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Completed">Completed</SelectItem>
+                      <SelectItem value="In Progress">In Progress</SelectItem>
+                      <SelectItem value="Pending">Pending</SelectItem>
+                      <SelectItem value="Cancelled">Cancelled</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="flex flex-col gap-3">
+                  <Label htmlFor="created-at">Date Ordered</Label>
+                  <Input
+                    id="created-at"
+                    name="created-at"
+                    defaultValue={new Date(
+                      row.original.created_at
+                    ).toLocaleDateString()}
+                    disabled
+                    className="opacity-50"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Date cannot be modified
+                  </p>
+                </div>
+                <div className="flex flex-col gap-3">
+                  <Label htmlFor="location">Location</Label>
+                  <Input
+                    id="location"
+                    name="location"
+                    defaultValue={row.original.user_location}
+                  />
+                </div>{" "}
+              </div>
+            </form>
+          </div>
+          <DrawerFooter>
+            <Button
+              type="submit"
+              disabled={isSubmitting}
+              onClick={(e) => {
+                e.preventDefault();
+                const form = e.currentTarget
+                  .closest("[data-vaul-drawer]")
+                  ?.querySelector("form") as HTMLFormElement;
+                if (form) {
+                  const formEvent = new Event("submit", {
+                    bubbles: true,
+                    cancelable: true,
+                  });
+                  form.dispatchEvent(formEvent);
+                }
+              }}
+            >
+              {isSubmitting ? "Saving..." : "Save Changes"}
+            </Button>
+            <DrawerClose asChild>
+              <Button variant="outline">Cancel</Button>
+            </DrawerClose>
+          </DrawerFooter>
+        </DrawerContent>
+      </Drawer>
+    </>
+  );
+}
+
+// ------x------
 // COLUMN DEFINITIONS
 // ------x------
 // Define all the columns for our data table
 // This includes special columns for drag handles and row selection checkboxes
-const columns: ColumnDef<z.infer<typeof schema>>[] = [
+const createColumns = (
+  onRefresh: () => void
+): ColumnDef<z.infer<typeof schema>>[] => [
   {
     id: "drag",
     header: () => null,
@@ -200,7 +598,7 @@ const columns: ColumnDef<z.infer<typeof schema>>[] = [
     accessorKey: "user_name",
     header: "Customer Name",
     cell: ({ row }) => {
-      return <TableCellViewer item={row.original} />;
+      return <TableCellViewer item={row.original} onRefresh={onRefresh} />;
     },
     enableHiding: false,
   },
@@ -253,27 +651,7 @@ const columns: ColumnDef<z.infer<typeof schema>>[] = [
   },
   {
     id: "actions",
-    cell: () => (
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button
-            variant="ghost"
-            className="data-[state=open]:bg-muted text-muted-foreground flex size-8"
-            size="icon"
-          >
-            <IconDotsVertical />
-            <span className="sr-only">Open menu</span>
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-32">
-          <DropdownMenuItem>Edit</DropdownMenuItem>
-          <DropdownMenuItem>Mark as Complete</DropdownMenuItem>
-          <DropdownMenuItem>Favorite</DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem variant="destructive">Delete</DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-    ),
+    cell: ({ row }) => <ActionsCell row={row} onRefresh={onRefresh} />,
   },
 ];
 
@@ -356,58 +734,68 @@ export function DataTable({
     useSensor(TouchSensor, {}),
     useSensor(KeyboardSensor, {})
   );
-
   // ------x------
   // API DATA FETCHING
   // ------x------
   // This effect fetches data from the API when the component mounts
   // It only runs if initialData is not provided
-  React.useEffect(() => {
-    const fetchData = async () => {
-      if (initialData) return; // Skip API call if initial data is provided
+  const fetchData = React.useCallback(async () => {
+    if (initialData) return; // Skip API call if initial data is provided
 
-      try {
-        setLoading(true);
-        const response = await fetch(apiUrl);
+    try {
+      setLoading(true);
+      const response = await fetch(apiUrl);
 
-        if (!response.ok) {
-          throw new Error(`API request failed with status ${response.status}`);
-        }
-        const apiData = await response.json();
-
-        // Transform the API data to match your schema
-        // We extract only the fields we need from the API response
-        const transformedData = apiData.map(
-          (item: Record<string, unknown>) => ({
-            id: item.id as number,
-            user_name: item.user_name as string,
-            total_price:
-              typeof item.total_price === "string"
-                ? parseFloat(item.total_price)
-                : (item.total_price as number),
-            order_status: (item.order_status as string) || "Pending", // Default to "Pending" if empty
-            created_at: item.created_at as string,
-            user_location: item.user_location as string,
-            email: item.email as string,
-          })
-        );
-
-        setData(transformedData);
-        setError(null);
-      } catch (err) {
-        console.error("Error fetching data:", err);
-        setError("Failed to load data. Please try again later.");
-      } finally {
-        setLoading(false);
+      if (!response.ok) {
+        throw new Error(`API request failed with status ${response.status}`);
       }
-    };
+      const apiData = await response.json();
 
+      // Transform the API data to match your schema
+      // We extract only the fields we need from the API response
+      const transformedData = apiData.map((item: Record<string, unknown>) => ({
+        id: item.id as number,
+        user_name: item.user_name as string,
+        total_price:
+          typeof item.total_price === "string"
+            ? parseFloat(item.total_price)
+            : (item.total_price as number),
+        order_status: (item.order_status as string) || "Pending", // Default to "Pending" if empty
+        created_at: item.created_at as string,
+        user_location: item.user_location as string,
+        email: item.email as string,
+      }));
+
+      setData(transformedData);
+      setError(null);
+    } catch (err) {
+      console.error("Error fetching data:", err);
+      setError("Failed to load data. Please try again later.");
+    } finally {
+      setLoading(false);
+    }
+  }, [apiUrl, initialData]);
+
+  React.useEffect(() => {
     fetchData();
-  }, [apiUrl, initialData]); // Re-fetch if apiUrl or initialData changes
+  }, [fetchData]); // Re-fetch if apiUrl or initialData changes
+
+  // Refresh function that can be called to reload data
+  const refreshData = React.useCallback(() => {
+    if (!initialData) {
+      fetchData();
+    }
+  }, [fetchData, initialData]);
 
   const dataIds = React.useMemo<UniqueIdentifier[]>(
     () => data?.map(({ id }) => id) || [],
     [data]
+  );
+
+  // Create columns with refresh function
+  const columns = React.useMemo(
+    () => createColumns(refreshData),
+    [refreshData]
   );
 
   const table = useReactTable({
@@ -718,18 +1106,66 @@ const chartConfig = {
 // ------x------
 // This component provides a detailed view of a row when clicking on the name field
 // It opens a drawer with additional information and form controls
-function TableCellViewer({ item }: { item: z.infer<typeof schema> }) {
+function TableCellViewer({
+  item,
+  trigger,
+  onRefresh,
+}: {
+  item: z.infer<typeof schema>;
+  trigger?: React.ReactNode;
+  onRefresh: () => void;
+}) {
   // Check if the user is on a mobile device to change drawer direction
   const isMobile = useIsMobile();
+  const [isSubmitting, setIsSubmitting] = React.useState(false);
+
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+
+    try {
+      const formData = new FormData(e.currentTarget);
+      const updates = {
+        user_name: formData.get("customer-name") as string,
+        user_location: formData.get("location") as string,
+        order_status: formData.get("order-status") as string,
+        total_price: parseFloat(formData.get("total-price") as string),
+      };
+
+      const response = await fetch(
+        `https://rlg7ahwue7.execute-api.eu-west-3.amazonaws.com/orders/${item.id}`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(updates),
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(
+          `Failed to update order: ${response.status} ${response.statusText}`
+        );
+      }
+
+      toast.success(`Order #${item.id} has been updated`);
+      onRefresh(); // Refresh the data to reflect the changes
+    } catch (error) {
+      toast.error("Failed to update order");
+      console.error("Update error:", error);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const defaultTrigger = (
+    <Button variant="link" className="text-foreground w-fit px-0 text-left">
+      {item.user_name}
+    </Button>
+  );
 
   return (
     <Drawer direction={isMobile ? "bottom" : "right"}>
-      {" "}
-      <DrawerTrigger asChild>
-        <Button variant="link" className="text-foreground w-fit px-0 text-left">
-          {item.user_name}
-        </Button>
-      </DrawerTrigger>
+      <DrawerTrigger asChild>{trigger || defaultTrigger}</DrawerTrigger>
       <DrawerContent>
         <DrawerHeader className="gap-1">
           <DrawerTitle>{item.user_name}</DrawerTitle>
@@ -790,29 +1226,48 @@ function TableCellViewer({ item }: { item: z.infer<typeof schema> }) {
                   and should wrap around.
                 </div>
               </div>
-              <Separator />
+              <Separator />{" "}
             </>
           )}{" "}
-          <form className="flex flex-col gap-4">
+          <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
             <div className="flex flex-col gap-3">
               <Label htmlFor="customer-name">Customer Name</Label>
-              <Input id="customer-name" defaultValue={item.user_name} />
+              <Input
+                id="customer-name"
+                name="customer-name"
+                defaultValue={item.user_name}
+              />
             </div>
             <div className="flex flex-col gap-3">
               <Label htmlFor="email">Email</Label>
-              <Input id="email" defaultValue={item.email} />
+              <Input
+                id="email"
+                name="email"
+                defaultValue={item.email}
+                disabled
+                className="opacity-50"
+              />
+              <p className="text-xs text-muted-foreground">
+                Email cannot be modified
+              </p>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="flex flex-col gap-3">
                 <Label htmlFor="total-price">Total Price</Label>
                 <Input
                   id="total-price"
+                  name="total-price"
+                  type="number"
+                  step="0.01"
                   defaultValue={item.total_price.toString()}
                 />
               </div>
               <div className="flex flex-col gap-3">
                 <Label htmlFor="order-status">Order Status</Label>
-                <Select defaultValue={item.order_status || "Pending"}>
+                <Select
+                  name="order-status"
+                  defaultValue={item.order_status || "Pending"}
+                >
                   <SelectTrigger id="order-status" className="w-full">
                     <SelectValue placeholder="Select a status" />
                   </SelectTrigger>
@@ -830,20 +1285,48 @@ function TableCellViewer({ item }: { item: z.infer<typeof schema> }) {
                 <Label htmlFor="created-at">Date Ordered</Label>
                 <Input
                   id="created-at"
+                  name="created-at"
                   defaultValue={new Date(item.created_at).toLocaleDateString()}
+                  disabled
+                  className="opacity-50"
                 />
+                <p className="text-xs text-muted-foreground">
+                  Date cannot be modified
+                </p>
               </div>
               <div className="flex flex-col gap-3">
                 <Label htmlFor="location">Location</Label>
-                <Input id="location" defaultValue={item.user_location} />
+                <Input
+                  id="location"
+                  name="location"
+                  defaultValue={item.user_location}
+                />
               </div>
             </div>
           </form>
         </div>
         <DrawerFooter>
-          <Button>Submit</Button>
+          <Button
+            type="submit"
+            disabled={isSubmitting}
+            onClick={(e) => {
+              e.preventDefault();
+              const form = e.currentTarget
+                .closest("[data-vaul-drawer]")
+                ?.querySelector("form") as HTMLFormElement;
+              if (form) {
+                const formEvent = new Event("submit", {
+                  bubbles: true,
+                  cancelable: true,
+                });
+                form.dispatchEvent(formEvent);
+              }
+            }}
+          >
+            {isSubmitting ? "Saving..." : "Save Changes"}
+          </Button>
           <DrawerClose asChild>
-            <Button variant="outline">Done</Button>
+            <Button variant="outline">Cancel</Button>
           </DrawerClose>
         </DrawerFooter>
       </DrawerContent>
