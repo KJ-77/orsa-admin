@@ -17,6 +17,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { useState } from "react";
+import { Upload, X, Star } from "lucide-react";
 import {
   Form,
   FormControl,
@@ -28,9 +29,34 @@ import {
 } from "@/components/ui/form";
 import { ToastContainer, toast } from "react-toastify";
 
+interface ImageUploadResponse {
+  message: string;
+  image: {
+    key: string;
+    url: string;
+    bucket: string;
+    contentType: string;
+    size: number;
+    fileName: string;
+  };
+}
+
+// Zod schema for image record creation
+const imageRecordSchema = z.object({
+  product_id: z.number().int().positive(),
+  image_url: z.string().url(),
+  image_key: z.string().min(1),
+  display_order: z.number().int().positive(),
+  is_primary: z.boolean(),
+});
+
 export function SiteHeader() {
   const [isLoading, setIsLoading] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [selectedImages, setSelectedImages] = useState<File[]>([]);
+  const [primaryImageIndex, setPrimaryImageIndex] = useState<number>(0);
+  const [imagePreviews, setImagePreviews] = useState<string[]>([]);
+  const [uploadProgress, setUploadProgress] = useState<string>("");
 
   const productSchema = z.object({
     name: z.string().min(2).max(100),
@@ -49,10 +75,186 @@ export function SiteHeader() {
     },
   });
 
-  async function onSubmit(values: z.infer<typeof productSchema>) {
-    setIsLoading(true);
+  // Handle image selection
+  const handleImageSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files || []);
+    if (files.length === 0) return;
+
+    // Validate file types
+    const validTypes = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
+    const validFiles = files.filter((file) => validTypes.includes(file.type));
+
+    if (validFiles.length !== files.length) {
+      toast.error("Only JPEG, PNG, and WebP images are allowed");
+      return;
+    }
+
+    setSelectedImages((prev) => [...prev, ...validFiles]);
+
+    // Create previews
+    validFiles.forEach((file) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setImagePreviews((prev) => [...prev, e.target?.result as string]);
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  // Remove image
+  const removeImage = (index: number) => {
+    setSelectedImages((prev) => prev.filter((_, i) => i !== index));
+    setImagePreviews((prev) => prev.filter((_, i) => i !== index));
+
+    // Adjust primary image index if needed
+    if (primaryImageIndex >= index && primaryImageIndex > 0) {
+      setPrimaryImageIndex((prev) => prev - 1);
+    }
+  };
+
+  // Set primary image
+  const setPrimaryImage = (index: number) => {
+    setPrimaryImageIndex(index);
+  };
+
+  // Upload image to S3
+  const uploadImageToS3 = async (file: File) => {
+    const formData = new FormData();
+    formData.append("image", file);
+
+    const response = await fetch(
+      "https://rlg7ahwue7.execute-api.eu-west-3.amazonaws.com/products/images/upload",
+      {
+        method: "POST",
+        body: formData,
+        headers: {
+          "Content-Type": "image/jpeg",
+        },
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(`Image upload failed: ${response.status}`);
+    }
+
+    return await response.json();
+  }; // Save image record to database
+  const saveImageRecord = async (
+    productId: number,
+    imageData: ImageUploadResponse,
+    displayOrder: number,
+    isPrimary: boolean
+  ) => {
+    // Use snake_case format as required by the API
+    const requestBody = {
+      product_id: productId,
+      image_url: imageData.image.url,
+      image_key: imageData.image.key,
+      display_order: displayOrder,
+      is_primary: isPrimary,
+    };
+
+    // Validate the request body with Zod schema
+    try {
+      imageRecordSchema.parse(requestBody);
+    } catch (validationError) {
+      console.error("Request body validation failed:", validationError);
+      throw new Error(`Invalid request body: ${validationError}`);
+    }
+
+    console.log("Saving image record with validated data:", requestBody);
+
+    const response = await fetch(
+      "https://rlg7ahwue7.execute-api.eu-west-3.amazonaws.com/products/images/record",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(requestBody),
+      }
+    );
+
+    if (!response.ok) {
+      // Get detailed error information
+      let errorMessage = `Image record save failed: ${response.status}`;
+      try {
+        const errorData = await response.text();
+        console.error("API Error Response:", errorData);
+        errorMessage += ` - ${errorData}`;
+      } catch (e) {
+        console.error("Could not parse error response:", e);
+      }
+      throw new Error(errorMessage);
+    }
+
+    return await response.json();
+  };
+  // Cleanup functions for rollback
+  const deleteProduct = async (productId: number) => {
     try {
       const response = await fetch(
+        `https://rlg7ahwue7.execute-api.eu-west-3.amazonaws.com/products/${productId}`,
+        {
+          method: "DELETE",
+        }
+      );
+
+      if (!response.ok) {
+        console.error(
+          `Failed to delete product ${productId}: ${response.status}`
+        );
+        throw new Error(`Failed to delete product: ${response.status}`);
+      }
+
+      console.log(`Product ${productId} deleted successfully`);
+    } catch (error) {
+      console.error(`Error deleting product ${productId}:`, error);
+      throw error;
+    }
+  };
+
+  const deleteProductImages = async (productId: number) => {
+    try {
+      const response = await fetch(
+        `https://rlg7ahwue7.execute-api.eu-west-3.amazonaws.com/products/${productId}/images`,
+        {
+          method: "DELETE",
+        }
+      );
+
+      if (!response.ok) {
+        console.error(
+          `Failed to delete images for product ${productId}: ${response.status}`
+        );
+        // Don't throw here as this might not be implemented yet
+      }
+
+      console.log(`Images for product ${productId} deletion attempted`);
+    } catch (error) {
+      console.error(`Error deleting images for product ${productId}:`, error);
+      // Don't throw here as this is cleanup
+    }
+  };
+  async function onSubmit(values: z.infer<typeof productSchema>) {
+    if (selectedImages.length === 0) {
+      toast.error("Please select at least one image");
+      return;
+    }
+
+    if (isLoading) {
+      return; // Prevent double submission
+    }
+
+    setIsLoading(true);
+    setUploadProgress("Creating product...");
+    let createdProductId: number | null = null;
+    const uploadedImages: ImageUploadResponse[] = [];
+
+    try {
+      // Step 1: Create the product
+      console.log("Creating product...");
+      const productResponse = await fetch(
         "https://rlg7ahwue7.execute-api.eu-west-3.amazonaws.com/products",
         {
           method: "POST",
@@ -63,19 +265,59 @@ export function SiteHeader() {
         }
       );
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+      if (!productResponse.ok) {
+        throw new Error(`Product creation failed: ${productResponse.status}`);
+      }
+      const productResult = await productResponse.json();
+      createdProductId = productResult.productId;
+      console.log("Product created successfully:", productResult); // Step 2: Upload images to S3 one at a time
+      console.log("Uploading images to S3 one by one...");
+      setUploadProgress(`Uploading images (0/${selectedImages.length})`);
+
+      for (let i = 0; i < selectedImages.length; i++) {
+        try {
+          setUploadProgress(
+            `Uploading image ${i + 1} of ${selectedImages.length}...`
+          );
+          console.log(
+            `Uploading image ${i + 1} of ${selectedImages.length}...`
+          );
+          const imageData = await uploadImageToS3(selectedImages[i]);
+          uploadedImages.push(imageData);
+          console.log(`Image ${i + 1} uploaded successfully:`, imageData);
+        } catch (uploadError) {
+          console.error(`Failed to upload image ${i + 1}:`, uploadError);
+          throw new Error(`Failed to upload image ${i + 1}: ${uploadError}`);
+        }
       }
 
-      const result = await response.json();
-      console.log("Product added successfully:", result);
-
-      // Reset form and close dialog on success
+      // Step 3: Save image records to database one at a time
+      console.log("Saving image records to database...");
+      setUploadProgress("Saving image records...");
+      for (let i = 0; i < uploadedImages.length; i++) {
+        try {
+          const isPrimary = i === primaryImageIndex;
+          const displayOrder = i + 1;
+          await saveImageRecord(
+            createdProductId!,
+            uploadedImages[i],
+            displayOrder,
+            isPrimary
+          );
+          console.log(`Image ${i + 1} record saved`);
+        } catch (saveError) {
+          console.error(`Failed to save image ${i + 1} record:`, saveError);
+          throw new Error(`Failed to save image ${i + 1} record: ${saveError}`);
+        }
+      } // Success - reset form and close dialog
       form.reset();
+      setSelectedImages([]);
+      setImagePreviews([]);
+      setPrimaryImageIndex(0);
+      setUploadProgress("");
       setIsDialogOpen(false);
 
-      // You could add a toast notification here for better UX
-      toast.success("Product added successfully", {
+      toast.success("Product and images added successfully!", {
         position: "top-right",
         autoClose: 3000,
         hideProgressBar: false,
@@ -85,11 +327,48 @@ export function SiteHeader() {
         progress: undefined,
         theme: "dark",
       });
+
+      // Refresh the page to show the new product
+      setTimeout(() => {
+        window.location.reload();
+      }, 1000);
     } catch (error) {
-      console.error("Error adding product:", error);
-      alert("Failed to add product. Please try again.");
+      console.error("Error during product creation:", error);
+
+      // Rollback: Clean up any created resources
+      let rollbackSuccessful = false;
+      try {
+        if (createdProductId) {
+          console.log(
+            `Rolling back: Deleting created product with ID ${createdProductId}...`
+          );
+          await deleteProduct(createdProductId);
+          await deleteProductImages(createdProductId);
+          rollbackSuccessful = true;
+          console.log("Rollback completed successfully");
+        }
+      } catch (rollbackError) {
+        console.error("Error during rollback:", rollbackError);
+        rollbackSuccessful = false;
+      }
+
+      const errorMessage = rollbackSuccessful
+        ? "Failed to create product. All changes have been rolled back."
+        : `Failed to create product. Warning: Product ${createdProductId} may still exist in the database and should be manually deleted.`;
+
+      toast.error(errorMessage, {
+        position: "top-right",
+        autoClose: 8000,
+        hideProgressBar: false,
+        closeOnClick: false,
+        pauseOnHover: true,
+        draggable: true,
+        progress: undefined,
+        theme: "dark",
+      });
     } finally {
       setIsLoading(false);
+      setUploadProgress("");
     }
   }
   return (
@@ -118,8 +397,8 @@ export function SiteHeader() {
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogTrigger asChild>
               <Button variant="outline">Add Product</Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-md">
+            </DialogTrigger>{" "}
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Enter Product Details</DialogTitle>
                 <DialogDescription>
@@ -219,6 +498,93 @@ export function SiteHeader() {
                     )}
                   />
 
+                  {/* Image Upload Section */}
+                  <div className="space-y-2">
+                    <FormLabel>Product Images *</FormLabel>
+                    <div className="space-y-4">
+                      {/* File Input */}
+                      <div className="flex items-center justify-center w-full">
+                        <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100">
+                          <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                            <Upload className="w-8 h-8 mb-2 text-gray-500" />
+                            <p className="mb-2 text-sm text-gray-500">
+                              <span className="font-semibold">
+                                Click to upload
+                              </span>{" "}
+                              or drag and drop
+                            </p>
+                            <p className="text-xs text-gray-500">
+                              PNG, JPG, JPEG, WebP (MAX. 5MB each)
+                            </p>
+                          </div>
+                          <input
+                            type="file"
+                            multiple
+                            accept="image/jpeg,image/jpg,image/png,image/webp"
+                            onChange={handleImageSelect}
+                            className="hidden"
+                          />
+                        </label>
+                      </div>
+
+                      {/* Image Previews */}
+                      {imagePreviews.length > 0 && (
+                        <div className="space-y-3">
+                          <p className="text-sm font-medium">
+                            Selected Images ({imagePreviews.length})
+                          </p>
+                          <div className="grid grid-cols-2 gap-3">
+                            {imagePreviews.map((preview, index) => (
+                              <div key={index} className="relative group">
+                                <div
+                                  className={`relative rounded-lg overflow-hidden border-2 ${
+                                    primaryImageIndex === index
+                                      ? "border-blue-500 ring-2 ring-blue-200"
+                                      : "border-gray-200"
+                                  }`}
+                                >
+                                  <img
+                                    src={preview}
+                                    alt={`Preview ${index + 1}`}
+                                    className="w-full h-20 object-cover"
+                                  />
+
+                                  {/* Primary Badge */}
+                                  {primaryImageIndex === index && (
+                                    <div className="absolute top-1 left-1 bg-blue-500 text-white text-xs px-2 py-1 rounded flex items-center gap-1">
+                                      <Star className="w-3 h-3 fill-current" />
+                                      Primary
+                                    </div>
+                                  )}
+
+                                  {/* Remove Button */}
+                                  <button
+                                    type="button"
+                                    onClick={() => removeImage(index)}
+                                    className="absolute top-1 right-1 bg-red-500 hover:bg-red-600 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                                  >
+                                    <X className="w-3 h-3" />
+                                  </button>
+                                </div>
+
+                                {/* Set as Primary Button */}
+                                {primaryImageIndex !== index && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setPrimaryImage(index)}
+                                    className="w-full mt-1 text-xs text-blue-600 hover:text-blue-800 underline"
+                                  >
+                                    Set as Primary
+                                  </button>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
                   <div className="flex gap-2 pt-4">
                     <Button
                       type="button"
@@ -227,9 +593,11 @@ export function SiteHeader() {
                       disabled={isLoading}
                     >
                       Cancel
-                    </Button>
+                    </Button>{" "}
                     <Button type="submit" disabled={isLoading}>
-                      {isLoading ? "Adding..." : "Add Product"}
+                      {isLoading
+                        ? uploadProgress || "Adding..."
+                        : "Add Product"}
                     </Button>
                   </div>
                 </form>

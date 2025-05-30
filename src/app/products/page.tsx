@@ -25,8 +25,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { MoreVertical, Pencil, Trash2, Loader2 } from "lucide-react";
+import { MoreVertical, Pencil, Trash2, Loader2, ImageIcon } from "lucide-react";
 import { toast } from "sonner";
+
+interface ProductImage {
+  id: number;
+  image_url: string;
+  image_key: string;
+  display_order: number;
+  is_primary: boolean;
+}
 
 interface Product {
   id: number;
@@ -34,6 +42,8 @@ interface Product {
   price: string;
   quantity: number;
   description: string;
+  images?: ProductImage[];
+  primaryImage?: string;
 }
 
 const ProductsPage = () => {
@@ -54,7 +64,7 @@ const ProductsPage = () => {
     quantity: 0,
     description: "",
   });
-  const [submitting, setSubmitting] = useState(false); // Fetch products
+  const [submitting, setSubmitting] = useState(false); // Fetch products with images
   const fetchProducts = async () => {
     try {
       console.log("Starting to fetch products...");
@@ -69,24 +79,17 @@ const ProductsPage = () => {
       }
       const data = await response.json();
       console.log("Data received:", data);
-      console.log("typeof data:", typeof data);
-      console.log("Array.isArray(data):", Array.isArray(data));
-      console.log("data.value:", data.value);
-      console.log("Object.keys(data):", Object.keys(data));
 
       // Handle different possible response structures
       let productsArray: Product[] = [];
 
       if (Array.isArray(data)) {
-        // If data is directly an array
         productsArray = data;
         console.log("Data is directly an array");
       } else if (data.value && Array.isArray(data.value)) {
-        // If data has a 'value' property with array
         productsArray = data.value;
         console.log("Data has 'value' property with array");
       } else if (data.products && Array.isArray(data.products)) {
-        // If data has a 'products' property with array
         productsArray = data.products;
         console.log("Data has 'products' property with array");
       } else {
@@ -94,9 +97,53 @@ const ProductsPage = () => {
         productsArray = [];
       }
 
-      console.log("Final productsArray:", productsArray);
-      console.log("Setting products to:", productsArray);
-      setProducts(productsArray);
+      // Fetch images for each product
+      const productsWithImages = await Promise.all(
+        productsArray.map(async (product) => {
+          try {
+            const imageResponse = await fetch(
+              `https://rlg7ahwue7.execute-api.eu-west-3.amazonaws.com/products/${product.id}/images`
+            );
+
+            if (imageResponse.ok) {
+              const imageData = await imageResponse.json();
+              const images = Array.isArray(imageData)
+                ? imageData
+                : imageData.images || [];
+              const primaryImage =
+                images.find((img: ProductImage) => img.is_primary)?.image_url ||
+                images[0]?.image_url ||
+                null;
+
+              return {
+                ...product,
+                images,
+                primaryImage,
+              };
+            } else {
+              console.log(`No images found for product ${product.id}`);
+              return {
+                ...product,
+                images: [],
+                primaryImage: null,
+              };
+            }
+          } catch (imageError) {
+            console.error(
+              `Error fetching images for product ${product.id}:`,
+              imageError
+            );
+            return {
+              ...product,
+              images: [],
+              primaryImage: null,
+            };
+          }
+        })
+      );
+
+      console.log("Final productsArray with images:", productsWithImages);
+      setProducts(productsWithImages);
     } catch (error) {
       console.error("Error fetching products:", error);
       toast.error("Failed to fetch products");
@@ -234,18 +281,30 @@ const ProductsPage = () => {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           {products.map((product) => (
-            <Card key={product.id} className="relative group">
-              <CardHeader className="pb-3">
-                <div className="flex justify-between items-start">
-                  <div className="flex-1">
-                    <CardTitle className="text-lg">{product.name}</CardTitle>
-                    <CardDescription className="text-2xl font-bold text-green-600 mt-1">
-                      ${product.price}
-                    </CardDescription>
+            <Card key={product.id} className="relative group overflow-hidden">
+              {/* Product Image */}
+              <div className="aspect-square relative bg-gray-100 overflow-hidden">
+                {product.primaryImage ? (
+                  <img
+                    src={product.primaryImage}
+                    alt={product.name}
+                    className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center bg-gray-100">
+                    <ImageIcon className="h-12 w-12 text-gray-400" />
                   </div>
+                )}
+
+                {/* Action Menu */}
+                <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        className="h-8 w-8 p-0 bg-white/90 hover:bg-white"
+                      >
                         <MoreVertical className="h-4 w-4" />
                       </Button>
                     </DropdownMenuTrigger>
@@ -264,6 +323,26 @@ const ProductsPage = () => {
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </div>
+
+                {/* Image Count Badge */}
+                {product.images && product.images.length > 1 && (
+                  <div className="absolute bottom-2 left-2 bg-black/70 text-white text-xs px-2 py-1 rounded">
+                    +{product.images.length - 1} more
+                  </div>
+                )}
+              </div>
+
+              <CardHeader className="pb-3">
+                <div className="flex justify-between items-start">
+                  <div className="flex-1">
+                    <CardTitle className="text-lg line-clamp-1">
+                      {product.name}
+                    </CardTitle>
+                    <CardDescription className="text-2xl font-bold text-green-600 mt-1">
+                      ${product.price}
+                    </CardDescription>
+                  </div>
+                </div>
               </CardHeader>
               <CardContent>
                 <div className="space-y-2">
@@ -276,7 +355,7 @@ const ProductsPage = () => {
                       <span className="text-sm text-muted-foreground">
                         Description:
                       </span>
-                      <p className="text-sm mt-1 line-clamp-3">
+                      <p className="text-sm mt-1 line-clamp-2">
                         {product.description}
                       </p>
                     </div>
