@@ -297,17 +297,28 @@ const ProductsPage = () => {
                   <div className="w-full h-full flex items-center justify-center bg-gray-100">
                     <ImageIcon className="h-12 w-12 text-gray-400" />
                   </div>
+                )}{" "}
+                {/* Image Count Badge */}
+                {product.images && product.images.length > 1 && (
+                  <div className="absolute bottom-2 left-2 bg-black/70 text-white text-xs px-2 py-1 rounded">
+                    +{product.images.length - 1} more
+                  </div>
                 )}
-
-                {/* Action Menu */}
-                <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+              </div>{" "}
+              <CardHeader className="pb-3">
+                <div className="flex justify-between items-start">
+                  <div className="flex-1">
+                    <CardTitle className="text-lg line-clamp-1">
+                      {product.name}
+                    </CardTitle>
+                    <CardDescription className="text-2xl font-bold text-green-600 mt-1">
+                      ${product.price}
+                    </CardDescription>
+                  </div>
+                  {/* Action Menu moved to header */}
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        className="h-8 w-8 p-0 bg-white/90 hover:bg-white"
-                      >
+                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
                         <MoreVertical className="h-4 w-4" />
                       </Button>
                     </DropdownMenuTrigger>
@@ -325,26 +336,6 @@ const ProductsPage = () => {
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
-                </div>
-
-                {/* Image Count Badge */}
-                {product.images && product.images.length > 1 && (
-                  <div className="absolute bottom-2 left-2 bg-black/70 text-white text-xs px-2 py-1 rounded">
-                    +{product.images.length - 1} more
-                  </div>
-                )}
-              </div>
-
-              <CardHeader className="pb-3">
-                <div className="flex justify-between items-start">
-                  <div className="flex-1">
-                    <CardTitle className="text-lg line-clamp-1">
-                      {product.name}
-                    </CardTitle>
-                    <CardDescription className="text-2xl font-bold text-green-600 mt-1">
-                      ${product.price}
-                    </CardDescription>
-                  </div>
                 </div>
               </CardHeader>
               <CardContent>
