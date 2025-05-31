@@ -102,7 +102,10 @@ const ProductsPage = () => {
         productsArray.map(async (product) => {
           try {
             const imageResponse = await fetch(
-              `https://rlg7ahwue7.execute-api.eu-west-3.amazonaws.com/products/${product.id}/images`
+              `https://rlg7ahwue7.execute-api.eu-west-3.amazonaws.com/products/${product.id}/images`,
+              {
+                method: "GET",
+              }
             );
 
             if (imageResponse.ok) {

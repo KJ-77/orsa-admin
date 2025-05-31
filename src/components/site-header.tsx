@@ -126,7 +126,7 @@ export function SiteHeader() {
       "https://rlg7ahwue7.execute-api.eu-west-3.amazonaws.com/products/images/upload",
       {
         method: "POST",
-        body: formData,
+        body: file,
         headers: {
           "Content-Type": "image/jpeg",
         },
