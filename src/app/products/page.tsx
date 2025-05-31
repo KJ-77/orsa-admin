@@ -11,6 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -25,7 +26,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { MoreVertical, Pencil, Trash2, Loader2, ImageIcon } from "lucide-react";
+import { MoreVertical, Pencil, Trash2, Loader2, ImageIcon, Plus, Star, MoveUp, MoveDown, X } from "lucide-react";
 import { toast } from "sonner";
 
 interface ProductImage {
@@ -57,14 +58,23 @@ const ProductsPage = () => {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [productToDelete, setProductToDelete] = useState<Product | null>(null);
-  const [productToEdit, setProductToEdit] = useState<Product | null>(null);
-  const [editForm, setEditForm] = useState({
+  const [productToEdit, setProductToEdit] = useState<Product | null>(null);  const [editForm, setEditForm] = useState({
     name: "",
     price: "",
     quantity: 0,
     description: "",
   });
-  const [submitting, setSubmitting] = useState(false); // Fetch products with images
+  const [submitting, setSubmitting] = useState(false);
+  
+  // Image management state
+  const [editingImages, setEditingImages] = useState<ProductImage[]>([]);
+  const [newImageForm, setNewImageForm] = useState({
+    image_url: "",
+    image_key: "",
+    display_order: 1,
+    is_primary: false,
+  });
+  const [showAddImageForm, setShowAddImageForm] = useState(false);// Fetch products with images
   const fetchProducts = async () => {
     try {
       console.log("Starting to fetch products...");
@@ -182,7 +192,6 @@ const ProductsPage = () => {
       setSubmitting(false);
     }
   };
-
   // Update product
   const handleUpdate = async () => {
     if (!productToEdit) return;
@@ -209,9 +218,21 @@ const ProductsPage = () => {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      // Update local state
+      // Update local state with new product data and images
+      const primaryImage = editingImages.find(img => img.is_primary)?.image_url || 
+                          editingImages[0]?.image_url || null;
+      
       setProducts((prev) =>
-        prev.map((p) => (p.id === productToEdit.id ? { ...p, ...editForm } : p))
+        prev.map((p) => 
+          p.id === productToEdit.id 
+            ? { 
+                ...p, 
+                ...editForm, 
+                images: editingImages,
+                primaryImage 
+              } 
+            : p
+        )
       );
 
       toast.success("Product updated successfully");
@@ -224,7 +245,6 @@ const ProductsPage = () => {
       setSubmitting(false);
     }
   };
-
   // Open edit dialog
   const openEditDialog = (product: Product) => {
     setProductToEdit(product);
@@ -234,13 +254,180 @@ const ProductsPage = () => {
       quantity: product.quantity,
       description: product.description,
     });
+    setEditingImages(product.images || []);
+    setShowAddImageForm(false);
+    setNewImageForm({
+      image_url: "",
+      image_key: "",
+      display_order: (product.images?.length || 0) + 1,
+      is_primary: (product.images?.length || 0) === 0,
+    });
     setEditDialogOpen(true);
   };
-
   // Open delete dialog
   const openDeleteDialog = (product: Product) => {
     setProductToDelete(product);
     setDeleteDialogOpen(true);
+  };
+
+  // Image management functions
+  const handleAddImage = async () => {
+    if (!productToEdit || !newImageForm.image_url.trim() || !newImageForm.image_key.trim()) {
+      toast.error("Please fill in all required fields");
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+      const response = await fetch(
+        "https://rlg7ahwue7.execute-api.eu-west-3.amazonaws.com/products/images/record",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            product_id: productToEdit.id,
+            image_url: newImageForm.image_url,
+            image_key: newImageForm.image_key,
+            display_order: newImageForm.display_order,
+            is_primary: newImageForm.is_primary,
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const newImage = await response.json();
+      
+      // Update editing images state
+      setEditingImages(prev => [...prev, newImage]);
+      
+      // Reset form
+      setNewImageForm({
+        image_url: "",
+        image_key: "",
+        display_order: editingImages.length + 2,
+        is_primary: false,
+      });
+      setShowAddImageForm(false);
+      
+      toast.success("Image added successfully");
+    } catch (error) {
+      console.error("Error adding image:", error);
+      toast.error("Failed to add image");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDeleteImage = async (imageId: number) => {
+    try {
+      setSubmitting(true);
+      const response = await fetch(
+        `https://rlg7ahwue7.execute-api.eu-west-3.amazonaws.com/products/images/record/${imageId}`,
+        {
+          method: "DELETE",
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      // Update editing images state
+      setEditingImages(prev => prev.filter(img => img.id !== imageId));
+      
+      toast.success("Image deleted successfully");
+    } catch (error) {
+      console.error("Error deleting image:", error);
+      toast.error("Failed to delete image");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleSetPrimaryImage = async (imageId: number) => {
+    if (!productToEdit) return;
+
+    try {
+      setSubmitting(true);
+      const response = await fetch(
+        `https://rlg7ahwue7.execute-api.eu-west-3.amazonaws.com/products/${productToEdit.id}/images/${imageId}/primary`,
+        {
+          method: "PUT",
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      // Update editing images state
+      setEditingImages(prev => prev.map(img => ({
+        ...img,
+        is_primary: img.id === imageId
+      })));
+      
+      toast.success("Primary image updated successfully");
+    } catch (error) {
+      console.error("Error setting primary image:", error);
+      toast.error("Failed to set primary image");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleUpdateImageOrder = async (imageId: number, newOrder: number) => {
+    try {
+      setSubmitting(true);
+      const response = await fetch(
+        `https://rlg7ahwue7.execute-api.eu-west-3.amazonaws.com/products/images/record/${imageId}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            display_order: newOrder,
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      // Update editing images state
+      setEditingImages(prev => prev.map(img => 
+        img.id === imageId ? { ...img, display_order: newOrder } : img
+      ).sort((a, b) => a.display_order - b.display_order));
+      
+      toast.success("Image order updated successfully");
+    } catch (error) {
+      console.error("Error updating image order:", error);
+      toast.error("Failed to update image order");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const moveImageUp = (imageId: number) => {
+    const imageIndex = editingImages.findIndex(img => img.id === imageId);
+    if (imageIndex > 0) {
+      const newOrder = editingImages[imageIndex - 1].display_order;
+      handleUpdateImageOrder(imageId, newOrder);
+    }
+  };
+
+  const moveImageDown = (imageId: number) => {
+    const imageIndex = editingImages.findIndex(img => img.id === imageId);
+    if (imageIndex < editingImages.length - 1) {
+      const newOrder = editingImages[imageIndex + 1].display_order;
+      handleUpdateImageOrder(imageId, newOrder);
+    }
   };
   useEffect(() => {
     console.log("useEffect running, calling fetchProducts...");
@@ -395,15 +582,13 @@ const ProductsPage = () => {
             </Button>
           </DialogFooter>
         </DialogContent>
-      </Dialog>
-
-      {/* Edit Product Dialog */}
+      </Dialog>      {/* Edit Product Dialog */}
       <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit Product</DialogTitle>
             <DialogDescription>
-              Update the product information below.
+              Update the product information and manage images below.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
@@ -445,8 +630,7 @@ const ProductsPage = () => {
                 }
                 placeholder="0"
               />
-            </div>{" "}
-            <div className="space-y-2">
+            </div>{" "}            <div className="space-y-2">
               <Label htmlFor="description">Description</Label>
               <Input
                 id="description"
@@ -459,6 +643,190 @@ const ProductsPage = () => {
                 }
                 placeholder="Product description"
               />
+            </div>
+
+            {/* Image Management Section */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <Label>Product Images</Label>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowAddImageForm(!showAddImageForm)}
+                  disabled={submitting}
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add Image
+                </Button>
+              </div>
+
+              {/* Add Image Form */}
+              {showAddImageForm && (
+                <div className="border rounded-lg p-4 space-y-3">
+                  <div className="space-y-2">
+                    <Label htmlFor="imageUrl">Image URL</Label>
+                    <Input
+                      id="imageUrl"
+                      value={newImageForm.image_url}
+                      onChange={(e) =>
+                        setNewImageForm((prev) => ({
+                          ...prev,
+                          image_url: e.target.value,
+                        }))
+                      }
+                      placeholder="https://example.com/image.jpg"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="imageKey">Image Key</Label>
+                    <Input
+                      id="imageKey"
+                      value={newImageForm.image_key}
+                      onChange={(e) =>
+                        setNewImageForm((prev) => ({
+                          ...prev,
+                          image_key: e.target.value,
+                        }))
+                      }
+                      placeholder="product-images/image123.jpg"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="displayOrder">Display Order</Label>
+                    <Input
+                      id="displayOrder"
+                      type="number"
+                      value={newImageForm.display_order}
+                      onChange={(e) =>
+                        setNewImageForm((prev) => ({
+                          ...prev,
+                          display_order: parseInt(e.target.value) || 1,
+                        }))
+                      }
+                      placeholder="1"
+                    />
+                  </div>                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="isPrimary"
+                      checked={newImageForm.is_primary}
+                      onCheckedChange={(checked) =>
+                        setNewImageForm((prev) => ({
+                          ...prev,
+                          is_primary: checked as boolean,
+                        }))
+                      }
+                    />
+                    <Label htmlFor="isPrimary">Set as primary image</Label>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={handleAddImage}
+                      disabled={submitting || !newImageForm.image_url.trim() || !newImageForm.image_key.trim()}
+                    >
+                      {submitting ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Adding...
+                        </>
+                      ) : (
+                        "Add Image"
+                      )}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowAddImageForm(false)}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {/* Existing Images */}
+              {editingImages.length > 0 && (
+                <div className="space-y-2">
+                  <Label>Current Images</Label>
+                  <div className="space-y-2 max-h-60 overflow-y-auto">
+                    {editingImages
+                      .sort((a, b) => a.display_order - b.display_order)
+                      .map((image, index) => (
+                        <div
+                          key={image.id}
+                          className="flex items-center gap-3 p-3 border rounded-lg"
+                        >
+                          <img
+                            src={image.image_url}
+                            alt={`Product image ${index + 1}`}
+                            className="w-16 h-16 object-cover rounded"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium truncate">
+                              Order: {image.display_order}
+                            </p>
+                            <p className="text-xs text-muted-foreground truncate">
+                              {image.image_key}
+                            </p>
+                            {image.is_primary && (
+                              <div className="flex items-center text-xs text-yellow-600">
+                                <Star className="w-3 h-3 mr-1 fill-current" />
+                                Primary
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => moveImageUp(image.id)}
+                              disabled={submitting || index === 0}
+                              className="h-8 w-8 p-0"
+                            >
+                              <MoveUp className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => moveImageDown(image.id)}
+                              disabled={submitting || index === editingImages.length - 1}
+                              className="h-8 w-8 p-0"
+                            >
+                              <MoveDown className="h-4 w-4" />
+                            </Button>
+                            {!image.is_primary && (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleSetPrimaryImage(image.id)}
+                                disabled={submitting}
+                                className="h-8 w-8 p-0"
+                              >
+                                <Star className="h-4 w-4" />
+                              </Button>
+                            )}
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleDeleteImage(image.id)}
+                              disabled={submitting}
+                              className="h-8 w-8 p-0 text-red-600 hover:text-red-700"
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
           <DialogFooter>
