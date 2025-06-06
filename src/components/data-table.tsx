@@ -706,21 +706,23 @@ export function DataTable({
     try {
       setLoading(true);
       const response = await apiClient.get(apiUrl);
-      const apiData = response.data;      // Transform the API data to match your schema
+      const apiData = response.data; // Transform the API data to match your schema
       // We extract only the fields we need from the API response
       const apiDataArray = Array.isArray(apiData) ? apiData : [];
-      const transformedData = apiDataArray.map((item: Record<string, unknown>) => ({
-        id: item.id as number,
-        user_name: item.user_name as string,
-        total_price:
-          typeof item.total_price === "string"
-            ? parseFloat(item.total_price)
-            : (item.total_price as number),
-        order_status: (item.order_status as string) || "Pending", // Default to "Pending" if empty
-        created_at: item.created_at as string,
-        user_location: item.user_location as string,
-        email: item.email as string,
-      }));
+      const transformedData = apiDataArray.map(
+        (item: Record<string, unknown>) => ({
+          id: item.id as number,
+          user_name: item.user_name as string,
+          total_price:
+            typeof item.total_price === "string"
+              ? parseFloat(item.total_price)
+              : (item.total_price as number),
+          order_status: (item.order_status as string) || "Pending", // Default to "Pending" if empty
+          created_at: item.created_at as string,
+          user_location: item.user_location as string,
+          email: item.email as string,
+        })
+      );
 
       setData(transformedData);
       setError(null);
