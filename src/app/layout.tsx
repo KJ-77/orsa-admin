@@ -4,6 +4,8 @@
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
+import { AuthProvider } from "@/contexts/auth-context";
+import "@/lib/amplify";
 import { Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 
@@ -69,21 +71,24 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
+        {" "}
         <ThemeProvider
           attribute="class"
           defaultTheme="system"
           enableSystem
           disableTransitionOnChange
         >
-          <header className="border-b">
-            <div className="flex h-16 items-center px-4">
-              <div className="font-bold text-xl">ORSA Admin</div>
-              <div className="ml-auto flex items-center space-x-4">
-                <ModeToggle />
+          <AuthProvider>
+            <header className="border-b">
+              <div className="flex h-16 items-center px-4">
+                <div className="font-bold text-xl">ORSA Admin</div>
+                <div className="ml-auto flex items-center space-x-4">
+                  <ModeToggle />
+                </div>
               </div>
-            </div>
-          </header>
-          <main>{children}</main>
+            </header>
+            <main>{children}</main>
+          </AuthProvider>
         </ThemeProvider>
       </body>
     </html>

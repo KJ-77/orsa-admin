@@ -73,6 +73,7 @@ import { toast } from "sonner"; // Toast notification library
 import { z } from "zod"; // Schema validation library
 
 import { useIsMobile } from "@/hooks/use-mobile";
+import { apiClient } from "@/lib/api-client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -186,22 +187,10 @@ function ActionsCell({
   const [isDeleting, setIsDeleting] = React.useState(false);
   const [isUpdating, setIsUpdating] = React.useState(false);
   const [isSubmitting, setIsSubmitting] = React.useState(false);
-
   const handleDelete = async () => {
     setIsDeleting(true);
     try {
-      const response = await fetch(
-        `https://rlg7ahwue7.execute-api.eu-west-3.amazonaws.com/orders/${row.original.id}`,
-        {
-          method: "DELETE",
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error(
-          `Failed to delete order: ${response.status} ${response.statusText}`
-        );
-      }
+      await apiClient.delete(`/orders/${row.original.id}`);
 
       toast.success(`Order #${row.original.id} has been deleted`);
       setDeleteDialogOpen(false);
@@ -213,29 +202,15 @@ function ActionsCell({
       setIsDeleting(false);
     }
   };
-
   const handleMarkComplete = async () => {
     setIsUpdating(true);
     try {
-      const response = await fetch(
-        `https://rlg7ahwue7.execute-api.eu-west-3.amazonaws.com/orders/${row.original.id}`,
-        {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            user_name: row.original.user_name,
-            user_location: row.original.user_location,
-            order_status: "Completed",
-            total_price: row.original.total_price,
-          }),
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error(
-          `Failed to update order: ${response.status} ${response.statusText}`
-        );
-      }
+      await apiClient.put(`/orders/${row.original.id}`, {
+        user_name: row.original.user_name,
+        user_location: row.original.user_location,
+        order_status: "Completed",
+        total_price: row.original.total_price,
+      });
 
       toast.success(`Order #${row.original.id} marked as complete`);
       setCompleteDialogOpen(false);
@@ -261,20 +236,7 @@ function ActionsCell({
         total_price: parseFloat(formData.get("total-price") as string),
       };
 
-      const response = await fetch(
-        `https://rlg7ahwue7.execute-api.eu-west-3.amazonaws.com/orders/${row.original.id}`,
-        {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(updates),
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error(
-          `Failed to update order: ${response.status} ${response.statusText}`
-        );
-      }
+      await apiClient.put(`/orders/${row.original.id}`, updates);
 
       toast.success(`Order #${row.original.id} has been updated`);
       setEditDrawerOpen(false);
@@ -733,8 +695,7 @@ export function DataTable({
     useSensor(MouseSensor, {}),
     useSensor(TouchSensor, {}),
     useSensor(KeyboardSensor, {})
-  );
-  // ------x------
+  ); // ------x------
   // API DATA FETCHING
   // ------x------
   // This effect fetches data from the API when the component mounts
@@ -744,16 +705,11 @@ export function DataTable({
 
     try {
       setLoading(true);
-      const response = await fetch(apiUrl);
-
-      if (!response.ok) {
-        throw new Error(`API request failed with status ${response.status}`);
-      }
-      const apiData = await response.json();
-
-      // Transform the API data to match your schema
+      const response = await apiClient.get(apiUrl);
+      const apiData = response.data;      // Transform the API data to match your schema
       // We extract only the fields we need from the API response
-      const transformedData = apiData.map((item: Record<string, unknown>) => ({
+      const apiDataArray = Array.isArray(apiData) ? apiData : [];
+      const transformedData = apiDataArray.map((item: Record<string, unknown>) => ({
         id: item.id as number,
         user_name: item.user_name as string,
         total_price:
@@ -1118,7 +1074,6 @@ function TableCellViewer({
   // Check if the user is on a mobile device to change drawer direction
   const isMobile = useIsMobile();
   const [isSubmitting, setIsSubmitting] = React.useState(false);
-
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setIsSubmitting(true);
@@ -1132,20 +1087,11 @@ function TableCellViewer({
         total_price: parseFloat(formData.get("total-price") as string),
       };
 
-      const response = await fetch(
+      // Use apiClient which already includes authentication headers
+      await apiClient.put(
         `https://rlg7ahwue7.execute-api.eu-west-3.amazonaws.com/orders/${item.id}`,
-        {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(updates),
-        }
+        updates
       );
-
-      if (!response.ok) {
-        throw new Error(
-          `Failed to update order: ${response.status} ${response.statusText}`
-        );
-      }
 
       toast.success(`Order #${item.id} has been updated`);
       onRefresh(); // Refresh the data to reflect the changes

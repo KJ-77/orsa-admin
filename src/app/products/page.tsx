@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { ProtectedRoute } from "@/components/protected-route";
 import {
   Card,
   CardContent,
@@ -26,7 +27,18 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { MoreVertical, Pencil, Trash2, Loader2, ImageIcon, Plus, Star, MoveUp, MoveDown, X } from "lucide-react";
+import {
+  MoreVertical,
+  Pencil,
+  Trash2,
+  Loader2,
+  ImageIcon,
+  Plus,
+  Star,
+  MoveUp,
+  MoveDown,
+  X,
+} from "lucide-react";
 import { toast } from "sonner";
 
 interface ProductImage {
@@ -58,14 +70,15 @@ const ProductsPage = () => {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [productToDelete, setProductToDelete] = useState<Product | null>(null);
-  const [productToEdit, setProductToEdit] = useState<Product | null>(null);  const [editForm, setEditForm] = useState({
+  const [productToEdit, setProductToEdit] = useState<Product | null>(null);
+  const [editForm, setEditForm] = useState({
     name: "",
     price: "",
     quantity: 0,
     description: "",
   });
   const [submitting, setSubmitting] = useState(false);
-  
+
   // Image management state
   const [editingImages, setEditingImages] = useState<ProductImage[]>([]);
   const [newImageForm, setNewImageForm] = useState({
@@ -74,7 +87,7 @@ const ProductsPage = () => {
     display_order: 1,
     is_primary: false,
   });
-  const [showAddImageForm, setShowAddImageForm] = useState(false);// Fetch products with images
+  const [showAddImageForm, setShowAddImageForm] = useState(false); // Fetch products with images
   const fetchProducts = async () => {
     try {
       console.log("Starting to fetch products...");
@@ -219,18 +232,20 @@ const ProductsPage = () => {
       }
 
       // Update local state with new product data and images
-      const primaryImage = editingImages.find(img => img.is_primary)?.image_url || 
-                          editingImages[0]?.image_url || null;
-      
+      const primaryImage =
+        editingImages.find((img) => img.is_primary)?.image_url ||
+        editingImages[0]?.image_url ||
+        null;
+
       setProducts((prev) =>
-        prev.map((p) => 
-          p.id === productToEdit.id 
-            ? { 
-                ...p, 
-                ...editForm, 
+        prev.map((p) =>
+          p.id === productToEdit.id
+            ? {
+                ...p,
+                ...editForm,
                 images: editingImages,
-                primaryImage 
-              } 
+                primaryImage,
+              }
             : p
         )
       );
@@ -272,7 +287,11 @@ const ProductsPage = () => {
 
   // Image management functions
   const handleAddImage = async () => {
-    if (!productToEdit || !newImageForm.image_url.trim() || !newImageForm.image_key.trim()) {
+    if (
+      !productToEdit ||
+      !newImageForm.image_url.trim() ||
+      !newImageForm.image_key.trim()
+    ) {
       toast.error("Please fill in all required fields");
       return;
     }
@@ -301,10 +320,10 @@ const ProductsPage = () => {
       }
 
       const newImage = await response.json();
-      
+
       // Update editing images state
-      setEditingImages(prev => [...prev, newImage]);
-      
+      setEditingImages((prev) => [...prev, newImage]);
+
       // Reset form
       setNewImageForm({
         image_url: "",
@@ -313,7 +332,7 @@ const ProductsPage = () => {
         is_primary: false,
       });
       setShowAddImageForm(false);
-      
+
       toast.success("Image added successfully");
     } catch (error) {
       console.error("Error adding image:", error);
@@ -338,8 +357,8 @@ const ProductsPage = () => {
       }
 
       // Update editing images state
-      setEditingImages(prev => prev.filter(img => img.id !== imageId));
-      
+      setEditingImages((prev) => prev.filter((img) => img.id !== imageId));
+
       toast.success("Image deleted successfully");
     } catch (error) {
       console.error("Error deleting image:", error);
@@ -366,11 +385,13 @@ const ProductsPage = () => {
       }
 
       // Update editing images state
-      setEditingImages(prev => prev.map(img => ({
-        ...img,
-        is_primary: img.id === imageId
-      })));
-      
+      setEditingImages((prev) =>
+        prev.map((img) => ({
+          ...img,
+          is_primary: img.id === imageId,
+        }))
+      );
+
       toast.success("Primary image updated successfully");
     } catch (error) {
       console.error("Error setting primary image:", error);
@@ -401,10 +422,14 @@ const ProductsPage = () => {
       }
 
       // Update editing images state
-      setEditingImages(prev => prev.map(img => 
-        img.id === imageId ? { ...img, display_order: newOrder } : img
-      ).sort((a, b) => a.display_order - b.display_order));
-      
+      setEditingImages((prev) =>
+        prev
+          .map((img) =>
+            img.id === imageId ? { ...img, display_order: newOrder } : img
+          )
+          .sort((a, b) => a.display_order - b.display_order)
+      );
+
       toast.success("Image order updated successfully");
     } catch (error) {
       console.error("Error updating image order:", error);
@@ -415,7 +440,7 @@ const ProductsPage = () => {
   };
 
   const moveImageUp = (imageId: number) => {
-    const imageIndex = editingImages.findIndex(img => img.id === imageId);
+    const imageIndex = editingImages.findIndex((img) => img.id === imageId);
     if (imageIndex > 0) {
       const newOrder = editingImages[imageIndex - 1].display_order;
       handleUpdateImageOrder(imageId, newOrder);
@@ -423,7 +448,7 @@ const ProductsPage = () => {
   };
 
   const moveImageDown = (imageId: number) => {
-    const imageIndex = editingImages.findIndex(img => img.id === imageId);
+    const imageIndex = editingImages.findIndex((img) => img.id === imageId);
     if (imageIndex < editingImages.length - 1) {
       const newOrder = editingImages[imageIndex + 1].display_order;
       handleUpdateImageOrder(imageId, newOrder);
@@ -463,7 +488,6 @@ const ProductsPage = () => {
           Refresh
         </Button>
       </div>
-
       {products.length === 0 ? (
         <div className="text-center py-12">
           <p className="text-muted-foreground">No products found</p>
@@ -547,7 +571,6 @@ const ProductsPage = () => {
           ))}
         </div>
       )}
-
       {/* Delete Confirmation Dialog */}
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <DialogContent>
@@ -582,7 +605,8 @@ const ProductsPage = () => {
             </Button>
           </DialogFooter>
         </DialogContent>
-      </Dialog>      {/* Edit Product Dialog */}
+      </Dialog>{" "}
+      {/* Edit Product Dialog */}
       <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -630,7 +654,8 @@ const ProductsPage = () => {
                 }
                 placeholder="0"
               />
-            </div>{" "}            <div className="space-y-2">
+            </div>{" "}
+            <div className="space-y-2">
               <Label htmlFor="description">Description</Label>
               <Input
                 id="description"
@@ -644,7 +669,6 @@ const ProductsPage = () => {
                 placeholder="Product description"
               />
             </div>
-
             {/* Image Management Section */}
             <div className="space-y-4">
               <div className="flex items-center justify-between">
@@ -706,7 +730,8 @@ const ProductsPage = () => {
                       }
                       placeholder="1"
                     />
-                  </div>                  <div className="flex items-center space-x-2">
+                  </div>{" "}
+                  <div className="flex items-center space-x-2">
                     <Checkbox
                       id="isPrimary"
                       checked={newImageForm.is_primary}
@@ -724,7 +749,11 @@ const ProductsPage = () => {
                       type="button"
                       size="sm"
                       onClick={handleAddImage}
-                      disabled={submitting || !newImageForm.image_url.trim() || !newImageForm.image_key.trim()}
+                      disabled={
+                        submitting ||
+                        !newImageForm.image_url.trim() ||
+                        !newImageForm.image_key.trim()
+                      }
                     >
                       {submitting ? (
                         <>
@@ -794,7 +823,9 @@ const ProductsPage = () => {
                               variant="ghost"
                               size="sm"
                               onClick={() => moveImageDown(image.id)}
-                              disabled={submitting || index === editingImages.length - 1}
+                              disabled={
+                                submitting || index === editingImages.length - 1
+                              }
                               className="h-8 w-8 p-0"
                             >
                               <MoveDown className="h-4 w-4" />
@@ -850,11 +881,19 @@ const ProductsPage = () => {
                 "Update Product"
               )}
             </Button>
-          </DialogFooter>
+          </DialogFooter>{" "}
         </DialogContent>
       </Dialog>
     </div>
   );
 };
 
-export default ProductsPage;
+const ProtectedProductsPage = () => {
+  return (
+    <ProtectedRoute>
+      <ProductsPage />
+    </ProtectedRoute>
+  );
+};
+
+export default ProtectedProductsPage;
