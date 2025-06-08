@@ -28,6 +28,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { ToastContainer, toast } from "react-toastify";
+import { apiClient } from "@/lib/api-client";
 
 interface ImageUploadResponse {
   message: string;
@@ -116,28 +117,15 @@ export function SiteHeader() {
   const setPrimaryImage = (index: number) => {
     setPrimaryImageIndex(index);
   };
-
   // Upload image to S3
   const uploadImageToS3 = async (file: File) => {
-    const formData = new FormData();
-    formData.append("image", file);
+    const response = await apiClient.post("/products/images/upload", file, {
+      headers: {
+        "Content-Type": "image/jpeg",
+      },
+    });
 
-    const response = await fetch(
-      "https://rlg7ahwue7.execute-api.eu-west-3.amazonaws.com/products/images/upload",
-      {
-        method: "POST",
-        body: file,
-        headers: {
-          "Content-Type": "image/jpeg",
-        },
-      }
-    );
-
-    if (!response.ok) {
-      throw new Error(`Image upload failed: ${response.status}`);
-    }
-
-    return await response.json();
+    return response.data;
   }; // Save image record to database
   const saveImageRecord = async (
     productId: number,
@@ -161,75 +149,27 @@ export function SiteHeader() {
       console.error("Request body validation failed:", validationError);
       throw new Error(`Invalid request body: ${validationError}`);
     }
-
     console.log("Saving image record with validated data:", requestBody);
 
-    const response = await fetch(
-      "https://rlg7ahwue7.execute-api.eu-west-3.amazonaws.com/products/images/record",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(requestBody),
-      }
+    const response = await apiClient.post(
+      "/products/images/record",
+      requestBody
     );
 
-    if (!response.ok) {
-      // Get detailed error information
-      let errorMessage = `Image record save failed: ${response.status}`;
-      try {
-        const errorData = await response.text();
-        console.error("API Error Response:", errorData);
-        errorMessage += ` - ${errorData}`;
-      } catch (e) {
-        console.error("Could not parse error response:", e);
-      }
-      throw new Error(errorMessage);
-    }
-
-    return await response.json();
-  };
-  // Cleanup functions for rollback
+    return response.data;
+  }; // Cleanup functions for rollback
   const deleteProduct = async (productId: number) => {
     try {
-      const response = await fetch(
-        `https://rlg7ahwue7.execute-api.eu-west-3.amazonaws.com/products/${productId}`,
-        {
-          method: "DELETE",
-        }
-      );
-
-      if (!response.ok) {
-        console.error(
-          `Failed to delete product ${productId}: ${response.status}`
-        );
-        throw new Error(`Failed to delete product: ${response.status}`);
-      }
-
+      await apiClient.delete(`/products/${productId}`);
       console.log(`Product ${productId} deleted successfully`);
     } catch (error) {
       console.error(`Error deleting product ${productId}:`, error);
       throw error;
     }
   };
-
   const deleteProductImages = async (productId: number) => {
     try {
-      const response = await fetch(
-        `https://rlg7ahwue7.execute-api.eu-west-3.amazonaws.com/products/${productId}/images`,
-        {
-          method: "DELETE",
-        }
-      );
-
-      if (!response.ok) {
-        console.error(
-          `Failed to delete images for product ${productId}: ${response.status}`
-        );
-        // Don't throw here as this might not be implemented yet
-      }
-
+      await apiClient.delete(`/products/${productId}/images`);
       console.log(`Images for product ${productId} deletion attempted`);
     } catch (error) {
       console.error(`Error deleting images for product ${productId}:`, error);
@@ -254,21 +194,8 @@ export function SiteHeader() {
     try {
       // Step 1: Create the product
       console.log("Creating product...");
-      const productResponse = await fetch(
-        "https://rlg7ahwue7.execute-api.eu-west-3.amazonaws.com/products",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(values),
-        }
-      );
-
-      if (!productResponse.ok) {
-        throw new Error(`Product creation failed: ${productResponse.status}`);
-      }
-      const productResult = await productResponse.json();
+      const productResponse = await apiClient.post("/products", values);
+      const productResult = productResponse.data as { productId: number };
       createdProductId = productResult.productId;
       console.log("Product created successfully:", productResult); // Step 2: Upload images to S3 one at a time
       console.log("Uploading images to S3 one by one...");
@@ -282,7 +209,9 @@ export function SiteHeader() {
           console.log(
             `Uploading image ${i + 1} of ${selectedImages.length}...`
           );
-          const imageData = await uploadImageToS3(selectedImages[i]);
+          const imageData = (await uploadImageToS3(
+            selectedImages[i]
+          )) as ImageUploadResponse;
           uploadedImages.push(imageData);
           console.log(`Image ${i + 1} uploaded successfully:`, imageData);
         } catch (uploadError) {

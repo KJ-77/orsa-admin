@@ -1087,13 +1087,8 @@ function TableCellViewer({
         user_location: formData.get("location") as string,
         order_status: formData.get("order-status") as string,
         total_price: parseFloat(formData.get("total-price") as string),
-      };
-
-      // Use apiClient which already includes authentication headers
-      await apiClient.put(
-        `https://rlg7ahwue7.execute-api.eu-west-3.amazonaws.com/orders/${item.id}`,
-        updates
-      );
+      }; // Use apiClient which already includes authentication headers
+      await apiClient.put(`/orders/${item.id}`, updates);
 
       toast.success(`Order #${item.id} has been updated`);
       onRefresh(); // Refresh the data to reflect the changes

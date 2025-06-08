@@ -1,8 +1,9 @@
-'use client'
+"use client";
 
 import { useEffect, useState } from "react";
 import { IconTrendingDown, IconTrendingUp } from "@tabler/icons-react";
 
+import { apiClient } from "@/lib/api-client";
 import { Badge } from "@/components/ui/badge";
 import {
   Card,
@@ -17,22 +18,16 @@ export function SectionCards() {
   const [totalPrice, setTotalPrice] = useState<number | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-
   useEffect(() => {
     // Function to fetch the total price data
     async function fetchTotalPrice() {
       try {
         setLoading(true);
-        const response = await fetch(
-          "https://rlg7ahwue7.execute-api.eu-west-3.amazonaws.com/orders/total-price?from=2025-05-01&to=2025-05-31"
+        const response = await apiClient.get(
+          "/orders/total-price?from=2025-05-01&to=2025-05-31"
         );
 
-        if (!response.ok) {
-          throw new Error(`API request failed with status ${response.status}`);
-        }
-
-        const data = await response.json();
-        setTotalPrice(data.totalPrice); // Assuming the API returns an object with totalPrice property
+        setTotalPrice(response.data.totalPrice); // Assuming the API returns an object with totalPrice property
         setError(null);
       } catch (err) {
         console.error("Failed to fetch total price:", err);

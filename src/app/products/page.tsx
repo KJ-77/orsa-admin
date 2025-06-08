@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { ProtectedRoute } from "@/components/protected-route";
+import { apiClient } from "@/lib/api-client";
 import {
   Card,
   CardContent,
@@ -92,15 +93,12 @@ const ProductsPage = () => {
     try {
       console.log("Starting to fetch products...");
       setLoading(true);
-      const response = await fetch(
-        "https://rlg7ahwue7.execute-api.eu-west-3.amazonaws.com/products"
-      );
+      const response = await apiClient.get("/products");
       console.log("Response received:", response.status, response.statusText);
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      const data = await response.json();
+      const data = response.data as
+        | Product[]
+        | { value?: Product[]; products?: Product[] };
       console.log("Data received:", data);
 
       // Handle different possible response structures
@@ -124,36 +122,25 @@ const ProductsPage = () => {
       const productsWithImages = await Promise.all(
         productsArray.map(async (product) => {
           try {
-            const imageResponse = await fetch(
-              `https://rlg7ahwue7.execute-api.eu-west-3.amazonaws.com/products/${product.id}/images`,
-              {
-                method: "GET",
-              }
+            const imageResponse = await apiClient.get(
+              `/products/${product.id}/images`
             );
 
-            if (imageResponse.ok) {
-              const imageData = await imageResponse.json();
-              const images = Array.isArray(imageData)
-                ? imageData
-                : imageData.images || [];
-              const primaryImage =
-                images.find((img: ProductImage) => img.is_primary)?.image_url ||
-                images[0]?.image_url ||
-                null;
-
-              return {
-                ...product,
-                images,
-                primaryImage,
-              };
-            } else {
-              console.log(`No images found for product ${product.id}`);
-              return {
-                ...product,
-                images: [],
-                primaryImage: null,
-              };
-            }
+            const imageData = imageResponse.data as
+              | ProductImage[]
+              | { images?: ProductImage[] };
+            const images = Array.isArray(imageData)
+              ? imageData
+              : imageData.images || [];
+            const primaryImage =
+              images.find((img: ProductImage) => img.is_primary)?.image_url ||
+              images[0]?.image_url ||
+              null;
+            return {
+              ...product,
+              images,
+              primaryImage: primaryImage || undefined,
+            };
           } catch (imageError) {
             console.error(
               `Error fetching images for product ${product.id}:`,
@@ -162,7 +149,7 @@ const ProductsPage = () => {
             return {
               ...product,
               images: [],
-              primaryImage: null,
+              primaryImage: undefined,
             };
           }
         })
@@ -170,34 +157,25 @@ const ProductsPage = () => {
 
       console.log("Final productsArray with images:", productsWithImages);
       setProducts(productsWithImages);
+      setLoading(false);
     } catch (error) {
       console.error("Error fetching products:", error);
       toast.error("Failed to fetch products");
-    } finally {
       setLoading(false);
     }
   };
 
   // Delete product
-  const handleDelete = async (product: Product) => {
+  const handleDeleteProduct = async (product: Product) => {
     try {
       setSubmitting(true);
-      const response = await fetch(
-        `https://rlg7ahwue7.execute-api.eu-west-3.amazonaws.com/products/${product.id}`,
-        {
-          method: "DELETE",
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
+      await apiClient.delete(`/products/${product.id}`);
 
       // Remove from local state
       setProducts((prev) => prev.filter((p) => p.id !== product.id));
-      toast.success("Product deleted successfully");
       setDeleteDialogOpen(false);
       setProductToDelete(null);
+      toast.success("Product deleted successfully");
     } catch (error) {
       console.error("Error deleting product:", error);
       toast.error("Failed to delete product");
@@ -206,30 +184,16 @@ const ProductsPage = () => {
     }
   };
   // Update product
-  const handleUpdate = async () => {
+  const handleUpdateProduct = async () => {
     if (!productToEdit) return;
-
     try {
       setSubmitting(true);
-      const response = await fetch(
-        `https://rlg7ahwue7.execute-api.eu-west-3.amazonaws.com/products/${productToEdit.id}`,
-        {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            name: editForm.name,
-            price: editForm.price,
-            quantity: editForm.quantity,
-            description: editForm.description,
-          }),
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
+      await apiClient.put(`/products/${productToEdit.id}`, {
+        name: editForm.name,
+        price: editForm.price,
+        quantity: editForm.quantity,
+        description: editForm.description,
+      });
 
       // Update local state with new product data and images
       const primaryImage =
@@ -241,7 +205,6 @@ const ProductsPage = () => {
         prev.map((p) =>
           p.id === productToEdit.id
             ? {
-                ...p,
                 ...editForm,
                 images: editingImages,
                 primaryImage,
@@ -250,9 +213,9 @@ const ProductsPage = () => {
         )
       );
 
-      toast.success("Product updated successfully");
       setEditDialogOpen(false);
       setProductToEdit(null);
+      toast.success("Product updated successfully");
     } catch (error) {
       console.error("Error updating product:", error);
       toast.error("Failed to update product");
@@ -291,35 +254,18 @@ const ProductsPage = () => {
       !productToEdit ||
       !newImageForm.image_url.trim() ||
       !newImageForm.image_key.trim()
-    ) {
-      toast.error("Please fill in all required fields");
+    )
       return;
-    }
-
     try {
       setSubmitting(true);
-      const response = await fetch(
-        "https://rlg7ahwue7.execute-api.eu-west-3.amazonaws.com/products/images/record",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            product_id: productToEdit.id,
-            image_url: newImageForm.image_url,
-            image_key: newImageForm.image_key,
-            display_order: newImageForm.display_order,
-            is_primary: newImageForm.is_primary,
-          }),
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const newImage = await response.json();
+      const response = await apiClient.post("/products/images/record", {
+        product_id: productToEdit.id,
+        image_url: newImageForm.image_url,
+        image_key: newImageForm.image_key,
+        display_order: newImageForm.display_order,
+        is_primary: newImageForm.is_primary,
+      });
+      const newImage = response.data as ProductImage;
 
       // Update editing images state
       setEditingImages((prev) => [...prev, newImage]);
@@ -332,7 +278,6 @@ const ProductsPage = () => {
         is_primary: false,
       });
       setShowAddImageForm(false);
-
       toast.success("Image added successfully");
     } catch (error) {
       console.error("Error adding image:", error);
@@ -345,20 +290,9 @@ const ProductsPage = () => {
   const handleDeleteImage = async (imageId: number) => {
     try {
       setSubmitting(true);
-      const response = await fetch(
-        `https://rlg7ahwue7.execute-api.eu-west-3.amazonaws.com/products/images/record/${imageId}`,
-        {
-          method: "DELETE",
-        }
-      );
+      await apiClient.delete(`/products/images/record/${imageId}`);
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      // Update editing images state
       setEditingImages((prev) => prev.filter((img) => img.id !== imageId));
-
       toast.success("Image deleted successfully");
     } catch (error) {
       console.error("Error deleting image:", error);
@@ -370,32 +304,22 @@ const ProductsPage = () => {
 
   const handleSetPrimaryImage = async (imageId: number) => {
     if (!productToEdit) return;
-
     try {
       setSubmitting(true);
-      const response = await fetch(
-        `https://rlg7ahwue7.execute-api.eu-west-3.amazonaws.com/products/${productToEdit.id}/images/${imageId}/primary`,
-        {
-          method: "PUT",
-        }
+      await apiClient.put(
+        `/products/${productToEdit.id}/images/${imageId}/primary`
       );
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      // Update editing images state
       setEditingImages((prev) =>
         prev.map((img) => ({
           ...img,
           is_primary: img.id === imageId,
         }))
       );
-
-      toast.success("Primary image updated successfully");
+      toast.success("Primary image updated");
     } catch (error) {
       console.error("Error setting primary image:", error);
-      toast.error("Failed to set primary image");
+      toast.error("Failed to update primary image");
     } finally {
       setSubmitting(false);
     }
@@ -404,24 +328,10 @@ const ProductsPage = () => {
   const handleUpdateImageOrder = async (imageId: number, newOrder: number) => {
     try {
       setSubmitting(true);
-      const response = await fetch(
-        `https://rlg7ahwue7.execute-api.eu-west-3.amazonaws.com/products/images/record/${imageId}`,
-        {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            display_order: newOrder,
-          }),
-        }
-      );
+      await apiClient.put(`/products/images/record/${imageId}`, {
+        display_order: newOrder,
+      });
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      // Update editing images state
       setEditingImages((prev) =>
         prev
           .map((img) =>
@@ -429,8 +339,7 @@ const ProductsPage = () => {
           )
           .sort((a, b) => a.display_order - b.display_order)
       );
-
-      toast.success("Image order updated successfully");
+      toast.success("Image order updated");
     } catch (error) {
       console.error("Error updating image order:", error);
       toast.error("Failed to update image order");
@@ -591,7 +500,9 @@ const ProductsPage = () => {
             </Button>
             <Button
               variant="destructive"
-              onClick={() => productToDelete && handleDelete(productToDelete)}
+              onClick={() =>
+                productToDelete && handleDeleteProduct(productToDelete)
+              }
               disabled={submitting}
             >
               {submitting ? (
@@ -869,7 +780,7 @@ const ProductsPage = () => {
               Cancel
             </Button>
             <Button
-              onClick={handleUpdate}
+              onClick={handleUpdateProduct}
               disabled={submitting || !editForm.name.trim()}
             >
               {submitting ? (
