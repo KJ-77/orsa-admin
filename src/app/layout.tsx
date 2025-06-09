@@ -4,10 +4,11 @@
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
-import { AuthProvider } from "@/contexts/auth-context";
+import { AuthProvider, useAuth } from "@/contexts/auth-context";
 import "@/lib/amplify";
-import { Moon, Sun } from "lucide-react";
+import { Moon, Sun, LogOut } from "lucide-react";
 import { useTheme } from "next-themes";
+import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -61,6 +62,50 @@ function ModeToggle() {
   );
 }
 
+function Header() {
+  const { user, logout } = useAuth();
+  const router = useRouter();
+
+  const handleSignOut = async () => {
+    try {
+      await logout();
+      router.push("/");
+    } catch (error) {
+      console.error("Error signing out:", error);
+    }
+  };
+
+  return (
+    <header className="border-b">
+      <div className="flex h-16 items-center px-4">
+        <div className="font-bold text-xl">ORSA Admin</div>
+        <div className="ml-auto flex items-center space-x-4">
+          {user && (
+            <>
+              <Button variant="ghost" onClick={() => router.push("/dashboard")}>
+                Dashboard
+              </Button>
+              <Button variant="ghost" onClick={() => router.push("/products")}>
+                Products
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handleSignOut}
+                title="Sign out"
+              >
+                <LogOut className="h-[1.2rem] w-[1.2rem]" />
+                <span className="sr-only">Sign out</span>
+              </Button>
+            </>
+          )}
+          <ModeToggle />
+        </div>
+      </div>
+    </header>
+  );
+}
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -79,14 +124,7 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           <AuthProvider>
-            <header className="border-b">
-              <div className="flex h-16 items-center px-4">
-                <div className="font-bold text-xl">ORSA Admin</div>
-                <div className="ml-auto flex items-center space-x-4">
-                  <ModeToggle />
-                </div>
-              </div>
-            </header>
+            <Header />
             <main>{children}</main>
           </AuthProvider>
         </ThemeProvider>
