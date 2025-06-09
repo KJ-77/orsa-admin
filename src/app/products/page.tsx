@@ -61,13 +61,8 @@ interface Product {
 }
 
 const ProductsPage = () => {
-  console.log("ProductsPage component rendering...");
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
-
-  // Debug log whenever products state changes
-  console.log("Current products state:", products);
-  console.log("Products length:", products.length);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [productToDelete, setProductToDelete] = useState<Product | null>(null);
@@ -91,10 +86,8 @@ const ProductsPage = () => {
   const [showAddImageForm, setShowAddImageForm] = useState(false); // Fetch products with images
   const fetchProducts = async () => {
     try {
-      console.log("Starting to fetch products...");
       setLoading(true);
       const response = await apiClient.get("/products");
-      console.log("Response received:", response.status, response.statusText);
 
       const data = response.data as
         | Product[]
