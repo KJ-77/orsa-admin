@@ -27,6 +27,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  DialogTrigger,
 } from "@/components/ui/dialog";
 import {
   MoreVertical,
@@ -39,8 +40,21 @@ import {
   MoveUp,
   MoveDown,
   X,
+  Upload,
 } from "lucide-react";
 import { toast } from "sonner";
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
+import { z } from "zod";
 
 interface ProductImage {
   id: number;
@@ -60,6 +74,35 @@ interface Product {
   primaryImage?: string;
 }
 
+interface ImageUploadResponse {
+  message: string;
+  image: {
+    key: string;
+    url: string;
+    bucket: string;
+    contentType: string;
+    size: number;
+    fileName: string;
+  };
+}
+
+// Zod schema for image record creation
+const imageRecordSchema = z.object({
+  product_id: z.number().int().positive(),
+  image_url: z.string().url(),
+  image_key: z.string().min(1),
+  display_order: z.number().int().positive(),
+  is_primary: z.boolean(),
+});
+
+// Product creation schema
+const productSchema = z.object({
+  name: z.string().min(2).max(100),
+  price: z.number().min(0),
+  quantity: z.number().min(1),
+  description: z.string().min(1),
+});
+
 const ProductsPage = () => {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
@@ -72,8 +115,15 @@ const ProductsPage = () => {
     price: "",
     quantity: 0,
     description: "",
-  });
-  const [submitting, setSubmitting] = useState(false);
+  });  const [submitting, setSubmitting] = useState(false);
+
+  // Add Product state
+  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [selectedImages, setSelectedImages] = useState<File[]>([]);
+  const [primaryImageIndex, setPrimaryImageIndex] = useState<number>(0);
+  const [imagePreviews, setImagePreviews] = useState<string[]>([]);
+  const [uploadProgress, setUploadProgress] = useState<string>("");
 
   // Image management state
   const [editingImages, setEditingImages] = useState<ProductImage[]>([]);
@@ -83,7 +133,20 @@ const ProductsPage = () => {
     display_order: 1,
     is_primary: false,
   });
-  const [showAddImageForm, setShowAddImageForm] = useState(false); // Fetch products with images
+  const [showAddImageForm, setShowAddImageForm] = useState(false);
+
+  // Add Product form
+  const addProductForm = useForm<z.infer<typeof productSchema>>({
+    resolver: zodResolver(productSchema),
+    defaultValues: {
+      name: "",
+      price: 0,
+      quantity: 1,
+      description: "",
+    },
+  });
+
+  // Fetch products with images
   const fetchProducts = async () => {
     try {
       setLoading(true);
@@ -339,7 +402,6 @@ const ProductsPage = () => {
       handleUpdateImageOrder(imageId, newOrder);
     }
   };
-
   const moveImageDown = (imageId: number) => {
     const imageIndex = editingImages.findIndex((img) => img.id === imageId);
     if (imageIndex < editingImages.length - 1) {
@@ -347,6 +409,186 @@ const ProductsPage = () => {
       handleUpdateImageOrder(imageId, newOrder);
     }
   };
+
+  // Add Product functions
+  const handleImageSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files || []);
+    if (files.length === 0) return;
+
+    // Validate file types
+    const validTypes = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
+    const validFiles = files.filter((file) => validTypes.includes(file.type));
+
+    if (validFiles.length !== files.length) {
+      toast.error("Only JPEG, PNG, and WebP images are allowed");
+      return;
+    }
+
+    setSelectedImages((prev) => [...prev, ...validFiles]);
+
+    // Create previews
+    validFiles.forEach((file) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setImagePreviews((prev) => [...prev, e.target?.result as string]);
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const removeImage = (index: number) => {
+    setSelectedImages((prev) => prev.filter((_, i) => i !== index));
+    setImagePreviews((prev) => prev.filter((_, i) => i !== index));
+
+    // Adjust primary image index if needed
+    if (primaryImageIndex >= index && primaryImageIndex > 0) {
+      setPrimaryImageIndex((prev) => prev - 1);
+    }
+  };
+
+  const setPrimaryImage = (index: number) => {
+    setPrimaryImageIndex(index);
+  };
+
+  const uploadImageToS3 = async (file: File) => {
+    const response = await apiClient.post("/products/images/upload", file, {
+      headers: {
+        "Content-Type": "image/jpeg",
+      },
+    });
+
+    return response.data;
+  };
+
+  const saveImageRecord = async (
+    productId: number,
+    imageData: ImageUploadResponse,
+    displayOrder: number,
+    isPrimary: boolean
+  ) => {
+    const requestBody = {
+      product_id: productId,
+      image_url: imageData.image.url,
+      image_key: imageData.image.key,
+      display_order: displayOrder,
+      is_primary: isPrimary,
+    };
+
+    try {
+      imageRecordSchema.parse(requestBody);
+    } catch (validationError) {
+      console.error("Request body validation failed:", validationError);
+      throw new Error(`Invalid request body: ${validationError}`);
+    }
+
+    const response = await apiClient.post("/products/images/record", requestBody);
+    return response.data;
+  };
+
+  const deleteProduct = async (productId: number) => {
+    try {
+      await apiClient.delete(`/products/${productId}`);
+      console.log(`Product ${productId} deleted successfully`);
+    } catch (error) {
+      console.error(`Error deleting product ${productId}:`, error);
+      throw error;
+    }
+  };
+
+  const deleteProductImages = async (productId: number) => {
+    try {
+      await apiClient.delete(`/products/${productId}/images`);
+      console.log(`Images for product ${productId} deletion attempted`);
+    } catch (error) {
+      console.error(`Error deleting images for product ${productId}:`, error);
+    }
+  };
+
+  const onSubmitAddProduct = async (values: z.infer<typeof productSchema>) => {
+    if (selectedImages.length === 0) {
+      toast.error("Please select at least one image");
+      return;
+    }
+
+    if (isLoading) {
+      return;
+    }
+
+    setIsLoading(true);
+    setUploadProgress("Creating product...");
+    let createdProductId: number | null = null;
+    const uploadedImages: ImageUploadResponse[] = [];
+
+    try {
+      // Step 1: Create the product
+      const productResponse = await apiClient.post("/products", values);
+      const productResult = productResponse.data as { productId: number };
+      createdProductId = productResult.productId;
+
+      // Step 2: Upload images to S3 one at a time
+      setUploadProgress(`Uploading images (0/${selectedImages.length})`);
+
+      for (let i = 0; i < selectedImages.length; i++) {
+        try {
+          setUploadProgress(`Uploading image ${i + 1} of ${selectedImages.length}...`);
+          const imageData = (await uploadImageToS3(selectedImages[i])) as ImageUploadResponse;
+          uploadedImages.push(imageData);
+        } catch (uploadError) {
+          throw new Error(`Failed to upload image ${i + 1}: ${uploadError}`);
+        }
+      }
+
+      // Step 3: Save image records to database one at a time
+      setUploadProgress("Saving image records...");
+      for (let i = 0; i < uploadedImages.length; i++) {
+        try {
+          const isPrimary = i === primaryImageIndex;
+          const displayOrder = i + 1;
+          await saveImageRecord(createdProductId!, uploadedImages[i], displayOrder, isPrimary);
+        } catch (saveError) {
+          throw new Error(`Failed to save image ${i + 1} record: ${saveError}`);
+        }
+      }
+
+      // Success - reset form and close dialog
+      addProductForm.reset();
+      setSelectedImages([]);
+      setImagePreviews([]);
+      setPrimaryImageIndex(0);
+      setUploadProgress("");
+      setIsAddDialogOpen(false);
+
+      toast.success("Product and images added successfully!");
+
+      // Refresh products list
+      fetchProducts();
+    } catch (error) {
+      console.error("Error during product creation:", error);
+
+      // Rollback: Clean up any created resources
+      let rollbackSuccessful = false;
+      try {
+        if (createdProductId) {
+          await deleteProduct(createdProductId);
+          await deleteProductImages(createdProductId);
+          rollbackSuccessful = true;
+        }
+      } catch (rollbackError) {
+        console.error("Error during rollback:", rollbackError);
+        rollbackSuccessful = false;
+      }
+
+      const errorMessage = rollbackSuccessful
+        ? "Failed to create product. All changes have been rolled back."
+        : `Failed to create product. Warning: Product ${createdProductId} may still exist in the database and should be manually deleted.`;
+
+      toast.error(errorMessage);
+    } finally {
+      setIsLoading(false);
+      setUploadProgress("");
+    }
+  };
+
   useEffect(() => {
     console.log("useEffect running, calling fetchProducts...");
     fetchProducts();
@@ -362,15 +604,24 @@ const ProductsPage = () => {
   }
 
   return (
-    <div className="container mx-auto p-6">
-      <div className="flex justify-between items-center mb-6">
+    <div className="container mx-auto p-6">      <div className="flex justify-between items-center mb-6">
         <div>
           <h1 className="text-3xl font-bold">Products</h1>
           <p className="text-muted-foreground">Manage your product inventory</p>
         </div>
-        <Button onClick={fetchProducts} variant="outline">
-          Refresh
-        </Button>
+        <div className="flex gap-2">
+          <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+            <DialogTrigger asChild>
+              <Button>
+                <Plus className="mr-2 h-4 w-4" />
+                Add Product
+              </Button>
+            </DialogTrigger>
+          </Dialog>
+          <Button onClick={fetchProducts} variant="outline">
+            Refresh
+          </Button>
+        </div>
       </div>
       {products.length === 0 ? (
         <div className="text-center py-12">
@@ -766,8 +1017,216 @@ const ProductsPage = () => {
               ) : (
                 "Update Product"
               )}
-            </Button>
-          </DialogFooter>{" "}
+            </Button>          </DialogFooter>{" "}
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Product Dialog */}
+      <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Add New Product</DialogTitle>
+            <DialogDescription>
+              Create a new product with images for your inventory.
+            </DialogDescription>
+          </DialogHeader>
+          <Form {...addProductForm}>
+            <form
+              onSubmit={addProductForm.handleSubmit(onSubmitAddProduct)}
+              className="space-y-4"
+            >
+              <FormField
+                control={addProductForm.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Product Name</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Enter product name" {...field} />
+                    </FormControl>
+                    <FormDescription>
+                      The display name for your product.
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={addProductForm.control}
+                name="price"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Price</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        placeholder="0.00"
+                        {...field}
+                        onChange={(e) =>
+                          field.onChange(parseFloat(e.target.value) || 0)
+                        }
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      Product price in your currency.
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={addProductForm.control}
+                name="quantity"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Quantity</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        min="1"
+                        placeholder="1"
+                        {...field}
+                        onChange={(e) =>
+                          field.onChange(parseInt(e.target.value) || 1)
+                        }
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      Available stock quantity.
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={addProductForm.control}
+                name="description"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Description</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="Enter product description"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      Brief description of the product.
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              {/* Image Upload Section */}
+              <div className="space-y-2">
+                <FormLabel>Product Images *</FormLabel>
+                <div className="space-y-4">
+                  {/* File Input */}
+                  <div className="flex items-center justify-center w-full">
+                    <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100">
+                      <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                        <Upload className="w-8 h-8 mb-2 text-gray-500" />
+                        <p className="mb-2 text-sm text-gray-500">
+                          <span className="font-semibold">
+                            Click to upload
+                          </span>{" "}
+                          or drag and drop
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          PNG, JPG, JPEG, WebP (MAX. 5MB each)
+                        </p>
+                      </div>
+                      <input
+                        type="file"
+                        multiple
+                        accept="image/jpeg,image/jpg,image/png,image/webp"
+                        onChange={handleImageSelect}
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
+
+                  {/* Image Previews */}
+                  {imagePreviews.length > 0 && (
+                    <div className="space-y-3">
+                      <p className="text-sm font-medium">
+                        Selected Images ({imagePreviews.length})
+                      </p>
+                      <div className="grid grid-cols-2 gap-3">
+                        {imagePreviews.map((preview, index) => (
+                          <div key={index} className="relative group">
+                            <div
+                              className={`relative rounded-lg overflow-hidden border-2 ${
+                                primaryImageIndex === index
+                                  ? "border-blue-500 ring-2 ring-blue-200"
+                                  : "border-gray-200"
+                              }`}
+                            >
+                              <img
+                                src={preview}
+                                alt={`Preview ${index + 1}`}
+                                className="w-full h-20 object-cover"
+                              />
+
+                              {/* Primary Badge */}
+                              {primaryImageIndex === index && (
+                                <div className="absolute top-1 left-1 bg-blue-500 text-white text-xs px-2 py-1 rounded flex items-center gap-1">
+                                  <Star className="w-3 h-3 fill-current" />
+                                  Primary
+                                </div>
+                              )}
+
+                              {/* Remove Button */}
+                              <button
+                                type="button"
+                                onClick={() => removeImage(index)}
+                                className="absolute top-1 right-1 bg-red-500 hover:bg-red-600 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </div>
+
+                            {/* Set as Primary Button */}
+                            {primaryImageIndex !== index && (
+                              <button
+                                type="button"
+                                onClick={() => setPrimaryImage(index)}
+                                className="w-full mt-1 text-xs text-blue-600 hover:text-blue-800 underline"
+                              >
+                                Set as Primary
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex gap-2 pt-4">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setIsAddDialogOpen(false)}
+                  disabled={isLoading}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={isLoading}>
+                  {isLoading
+                    ? uploadProgress || "Adding..."
+                    : "Add Product"}
+                </Button>
+              </div>
+            </form>
+          </Form>
         </DialogContent>
       </Dialog>
     </div>
