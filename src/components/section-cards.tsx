@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { IconTrendingDown, IconTrendingUp } from "@tabler/icons-react";
 
 import { apiClient } from "@/lib/api-client";
+import { useAuth } from "@/contexts/auth-context";
 import { Badge } from "@/components/ui/badge";
 import {
   Card,
@@ -18,27 +19,48 @@ export function SectionCards() {
   const [totalPrice, setTotalPrice] = useState<number | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const { isAuthenticated, getAuthToken } = useAuth();
+
   useEffect(() => {
     // Function to fetch the total price data
     async function fetchTotalPrice() {
+      // Check if user is authenticated before making API call
+      if (!isAuthenticated) {
+        setError("User not authenticated");
+        setLoading(false);
+        return;
+      }
+
       try {
         setLoading(true);
-        const response = await apiClient.get(
+
+        // Debug: Check if we can get the auth token
+        const token = await getAuthToken();
+        console.log("Auth token available:", !!token);
+
+        const response = await apiClient.get<{ totalPrice: number }>(
           "/orders/total-price?from=2025-05-01&to=2025-05-31"
         );
 
-        setTotalPrice(response.data.totalPrice); // Assuming the API returns an object with totalPrice property
+        setTotalPrice(response.data.totalPrice);
         setError(null);
       } catch (err) {
         console.error("Failed to fetch total price:", err);
-        setError("Failed to load total price data");
+
+        // More detailed error logging
+        if (err instanceof Error) {
+          console.error("Error message:", err.message);
+          setError(`Failed to load data: ${err.message}`);
+        } else {
+          setError("Failed to load total price data");
+        }
       } finally {
         setLoading(false);
       }
     }
 
     fetchTotalPrice();
-  }, []); // Empty dependency array means this effect runs once on mount
+  }, [isAuthenticated, getAuthToken]); // Add dependencies to re-run when auth state changes
 
   // Format the price to display as currency
   const formattedPrice =

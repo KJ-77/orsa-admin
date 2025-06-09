@@ -1,3 +1,5 @@
+import { fetchAuthSession } from "aws-amplify/auth";
+
 interface ApiResponse<T = unknown> {
   data: T;
   status: number;
@@ -10,7 +12,6 @@ class ApiClient {
   constructor(baseURL?: string) {
     this.baseURL = baseURL || "";
   }
-
   private async request<T = unknown>(
     url: string,
     options: RequestInit = {}
@@ -19,6 +20,17 @@ class ApiClient {
       "Content-Type": "application/json",
       ...(options.headers as Record<string, string>),
     };
+
+    // Add authentication token if available
+    try {
+      const session = await fetchAuthSession();
+      const token = session.tokens?.accessToken?.toString();
+      if (token) {
+        headers.Authorization = `Bearer ${token}`;
+      }
+    } catch {
+      // If auth fails, continue without token - let the API handle the unauthorized request
+    }
 
     const config: RequestInit = {
       ...options,
