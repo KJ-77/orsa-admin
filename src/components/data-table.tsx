@@ -705,7 +705,9 @@ export function DataTable({
 
     try {
       setLoading(true);
+      console.log("DataTable: Fetching data from:", apiUrl);
       const response = await apiClient.get(apiUrl);
+      console.log("DataTable: API response:", response);
       const apiData = response.data; // Transform the API data to match your schema
       // We extract only the fields we need from the API response
       const apiDataArray = Array.isArray(apiData) ? apiData : [];
@@ -725,7 +727,8 @@ export function DataTable({
       );
       setData(transformedData);
       setError(null);
-    } catch {
+    } catch (error) {
+      console.error("DataTable: Error fetching data:", error);
       setError("Failed to load data. Please try again later.");
     } finally {
       setLoading(false);

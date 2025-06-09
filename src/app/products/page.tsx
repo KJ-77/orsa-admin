@@ -115,7 +115,8 @@ const ProductsPage = () => {
     price: "",
     quantity: 0,
     description: "",
-  });  const [submitting, setSubmitting] = useState(false);
+  });
+  const [submitting, setSubmitting] = useState(false);
 
   // Add Product state
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
@@ -240,18 +241,17 @@ const ProductsPage = () => {
         price: editForm.price,
         quantity: editForm.quantity,
         description: editForm.description,
-      });
-
-      // Update local state with new product data and images
+      });      // Update local state with new product data and images
       const primaryImage =
         editingImages.find((img) => img.is_primary)?.image_url ||
         editingImages[0]?.image_url ||
-        null;
+        undefined;
 
       setProducts((prev) =>
         prev.map((p) =>
           p.id === productToEdit.id
             ? {
+                ...p,
                 ...editForm,
                 images: editingImages,
                 primaryImage,
@@ -481,7 +481,10 @@ const ProductsPage = () => {
       throw new Error(`Invalid request body: ${validationError}`);
     }
 
-    const response = await apiClient.post("/products/images/record", requestBody);
+    const response = await apiClient.post(
+      "/products/images/record",
+      requestBody
+    );
     return response.data;
   };
 
@@ -530,8 +533,12 @@ const ProductsPage = () => {
 
       for (let i = 0; i < selectedImages.length; i++) {
         try {
-          setUploadProgress(`Uploading image ${i + 1} of ${selectedImages.length}...`);
-          const imageData = (await uploadImageToS3(selectedImages[i])) as ImageUploadResponse;
+          setUploadProgress(
+            `Uploading image ${i + 1} of ${selectedImages.length}...`
+          );
+          const imageData = (await uploadImageToS3(
+            selectedImages[i]
+          )) as ImageUploadResponse;
           uploadedImages.push(imageData);
         } catch (uploadError) {
           throw new Error(`Failed to upload image ${i + 1}: ${uploadError}`);
@@ -544,7 +551,12 @@ const ProductsPage = () => {
         try {
           const isPrimary = i === primaryImageIndex;
           const displayOrder = i + 1;
-          await saveImageRecord(createdProductId!, uploadedImages[i], displayOrder, isPrimary);
+          await saveImageRecord(
+            createdProductId!,
+            uploadedImages[i],
+            displayOrder,
+            isPrimary
+          );
         } catch (saveError) {
           throw new Error(`Failed to save image ${i + 1} record: ${saveError}`);
         }
@@ -604,7 +616,9 @@ const ProductsPage = () => {
   }
 
   return (
-    <div className="container mx-auto p-6">      <div className="flex justify-between items-center mb-6">
+    <div className="container mx-auto p-6">
+      {" "}
+      <div className="flex justify-between items-center mb-6">
         <div>
           <h1 className="text-3xl font-bold">Products</h1>
           <p className="text-muted-foreground">Manage your product inventory</p>
@@ -1017,10 +1031,10 @@ const ProductsPage = () => {
               ) : (
                 "Update Product"
               )}
-            </Button>          </DialogFooter>{" "}
+            </Button>{" "}
+          </DialogFooter>{" "}
         </DialogContent>
       </Dialog>
-
       {/* Add Product Dialog */}
       <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -1095,9 +1109,7 @@ const ProductsPage = () => {
                         }
                       />
                     </FormControl>
-                    <FormDescription>
-                      Available stock quantity.
-                    </FormDescription>
+                    <FormDescription>Available stock quantity.</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -1133,9 +1145,7 @@ const ProductsPage = () => {
                       <div className="flex flex-col items-center justify-center pt-5 pb-6">
                         <Upload className="w-8 h-8 mb-2 text-gray-500" />
                         <p className="mb-2 text-sm text-gray-500">
-                          <span className="font-semibold">
-                            Click to upload
-                          </span>{" "}
+                          <span className="font-semibold">Click to upload</span>{" "}
                           or drag and drop
                         </p>
                         <p className="text-xs text-gray-500">
@@ -1220,9 +1230,7 @@ const ProductsPage = () => {
                   Cancel
                 </Button>
                 <Button type="submit" disabled={isLoading}>
-                  {isLoading
-                    ? uploadProgress || "Adding..."
-                    : "Add Product"}
+                  {isLoading ? uploadProgress || "Adding..." : "Add Product"}
                 </Button>
               </div>
             </form>
