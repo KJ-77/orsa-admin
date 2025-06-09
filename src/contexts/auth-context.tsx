@@ -39,6 +39,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [needsPasswordChange, setNeedsPasswordChange] = useState(false);
   const [challengeSession, setChallengeSession] = useState<unknown>(null);
+  const [, setSessionTimer] = useState<NodeJS.Timeout | null>(null);
 
   const extractGroupsFromToken = (token: string): string[] => {
     try {
@@ -48,59 +49,84 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return [];
     }
   };
+  // Start session timeout timer (1 hour)
+  const startSessionTimer = useCallback(() => {
+    // Clear any existing timer using ref or state callback
+    setSessionTimer((prevTimer) => {
+      if (prevTimer) {
+        clearTimeout(prevTimer);
+      }
+
+      // Set new timer for 1 hour (3600000 ms)
+      const timer = setTimeout(async () => {
+        await signOut();
+        setUser(null);
+        setNeedsPasswordChange(false);
+        setChallengeSession(null);
+        alert("Your session has expired. Please log in again.");
+      }, 3600000); // 1 hour in milliseconds
+
+      return timer;
+    });
+  }, []); // Remove sessionTimer dependency
+
+  // Clear session timer
+  const clearSessionTimer = useCallback(() => {
+    setSessionTimer((prevTimer) => {
+      if (prevTimer) {
+        clearTimeout(prevTimer);
+      }
+      return null;
+    });
+  }, []); // Remove sessionTimer dependency
+
   const checkAuthState = useCallback(async () => {
     try {
-      console.log("Checking auth state...");
       const currentUser = await getCurrentUser();
-      console.log("Current user:", currentUser);
 
       const session = await fetchAuthSession();
-      console.log("Session tokens:", session.tokens);
 
       // Extract groups from JWT token
       const groups = extractGroupsFromToken(
         session.tokens?.accessToken?.toString() || ""
       );
-      console.log("User groups:", groups); // Check if user belongs to "admins" group
-      // TEMPORARY: Comment out admin check for testing
-      // if (!groups.includes("admins")) {
-      //   console.error("User is not in admins group. Available groups:", groups);
-      //   await signOut();
-      //   setUser(null);
-      //   throw new Error("User does not have admin access");
-      // }
 
-      console.log("User has admin access, setting user state");
       setUser({
         username: currentUser.username,
         email: currentUser.signInDetails?.loginId || "",
         groups,
-      });
-    } catch (error) {
-      console.error("Auth state check failed:", error);
+      }); // Start session timer when user is authenticated
+      startSessionTimer();
+    } catch {
       setUser(null);
+      clearSessionTimer();
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [startSessionTimer, clearSessionTimer]); // Keep these dependencies but they're now stable
 
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => {
+      clearSessionTimer();
+    };
+  }, [clearSessionTimer]);
+  // Only run checkAuthState once on mount
   useEffect(() => {
     checkAuthState();
-  }, [checkAuthState]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Intentionally empty to prevent infinite loop - checkAuthState is stable
   const login = async (email: string, password: string) => {
     try {
       setIsLoading(true);
-      console.log("Starting login process for:", email);
 
       const result = await signIn({ username: email, password });
-      console.log("signIn result:", result);
 
       // Check if password change is required
       if (
         result.nextStep?.signInStep ===
         "CONFIRM_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED"
       ) {
-        console.log("Password change required, setting up challenge session");
         setNeedsPasswordChange(true);
         setChallengeSession(result);
         setIsLoading(false);
@@ -109,11 +135,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       // Normal login flow
       if (result.isSignedIn) {
-        console.log("Normal login completed");
         await checkAuthState();
       }
     } catch (error: unknown) {
-      console.error("Login error:", error);
       setIsLoading(false);
       const message = error instanceof Error ? error.message : "Login failed";
       throw new Error(message);
@@ -121,44 +145,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
   const logout = async () => {
     try {
+      clearSessionTimer(); // Clear the session timer on logout
       await signOut();
       setUser(null);
       setNeedsPasswordChange(false);
       setChallengeSession(null);
-    } catch (error) {
-      console.error("Logout error:", error);
+    } catch {
+      clearSessionTimer();
     }
   };
   const completeNewPassword = async (newPassword: string) => {
     try {
-      console.log("Starting password change process...");
-
       if (!challengeSession) {
-        console.error("No challenge session available");
         throw new Error("No active challenge session");
       }
 
-      console.log("Calling confirmSignIn with new password...");
       const result = await confirmSignIn({
         challengeResponse: newPassword,
       });
 
-      console.log("confirmSignIn result:", result);
-
       if (result.isSignedIn) {
-        console.log("Sign-in completed successfully");
         setNeedsPasswordChange(false);
         setChallengeSession(null);
         await checkAuthState();
       } else {
-        console.log("Sign-in not completed, result:", result);
         throw new Error("Sign-in was not completed after password change");
       }
     } catch (error: unknown) {
-      console.error("Password change error:", error);
       if (error instanceof Error) {
-        console.error("Error message:", error.message);
-        console.error("Error stack:", error.stack);
+        // Error details for debugging can be logged to server or error tracking service
       }
       const message =
         error instanceof Error ? error.message : "Password change failed";

@@ -26,9 +26,9 @@ export default function Page() {
                 <SectionCards />
                 <div className="px-4 lg:px-6">
                   <ChartAreaInteractive />
-                </div>
+                </div>{" "}
                 {/* Fetch orders from API */}
-                <DataTable apiUrl="https://rlg7ahwue7.execute-api.eu-west-3.amazonaws.com/orders" />
+                <DataTable apiUrl="/orders" />
               </div>
             </div>
           </div>

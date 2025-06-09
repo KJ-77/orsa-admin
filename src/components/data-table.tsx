@@ -723,11 +723,9 @@ export function DataTable({
           email: item.email as string,
         })
       );
-
       setData(transformedData);
       setError(null);
-    } catch (err) {
-      console.error("Error fetching data:", err);
+    } catch {
       setError("Failed to load data. Please try again later.");
     } finally {
       setLoading(false);

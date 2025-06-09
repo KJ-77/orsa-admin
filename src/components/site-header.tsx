@@ -143,6 +143,7 @@ export function SiteHeader() {
     };
 
     // Validate the request body with Zod schema
+    
     try {
       imageRecordSchema.parse(requestBody);
     } catch (validationError) {

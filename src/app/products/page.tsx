@@ -88,26 +88,20 @@ const ProductsPage = () => {
     try {
       setLoading(true);
       const response = await apiClient.get("/products");
-
       const data = response.data as
         | Product[]
         | { value?: Product[]; products?: Product[] };
-      console.log("Data received:", data);
 
       // Handle different possible response structures
       let productsArray: Product[] = [];
 
       if (Array.isArray(data)) {
         productsArray = data;
-        console.log("Data is directly an array");
       } else if (data.value && Array.isArray(data.value)) {
         productsArray = data.value;
-        console.log("Data has 'value' property with array");
       } else if (data.products && Array.isArray(data.products)) {
         productsArray = data.products;
-        console.log("Data has 'products' property with array");
       } else {
-        console.log("Unknown data structure, setting empty array");
         productsArray = [];
       }
 
@@ -148,11 +142,9 @@ const ProductsPage = () => {
         })
       );
 
-      console.log("Final productsArray with images:", productsWithImages);
       setProducts(productsWithImages);
       setLoading(false);
-    } catch (error) {
-      console.error("Error fetching products:", error);
+    } catch {
       toast.error("Failed to fetch products");
       setLoading(false);
     }
@@ -169,8 +161,7 @@ const ProductsPage = () => {
       setDeleteDialogOpen(false);
       setProductToDelete(null);
       toast.success("Product deleted successfully");
-    } catch (error) {
-      console.error("Error deleting product:", error);
+    } catch {
       toast.error("Failed to delete product");
     } finally {
       setSubmitting(false);
@@ -364,20 +355,11 @@ const ProductsPage = () => {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
-        <Loader2 className="h-8 w-8 animate-spin" />
+        <Loader2 className="h-8 w-8 animate-spin" />{" "}
         <span className="ml-2">Loading products...</span>
       </div>
     );
   }
-
-  console.log(
-    "About to render. Products:",
-    products,
-    "Length:",
-    products.length,
-    "Loading:",
-    loading
-  );
 
   return (
     <div className="container mx-auto p-6">
