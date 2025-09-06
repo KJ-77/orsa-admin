@@ -17,7 +17,8 @@ class ApiClient {
     options: RequestInit = {}
   ): Promise<ApiResponse<T>> {
     const headers: Record<string, string> = {
-      "Content-Type": "application/json",
+      // Only set Content-Type to application/json if we're not uploading a file
+      ...(!(options.body instanceof File) && { "Content-Type": "application/json" }),
       ...(options.headers as Record<string, string>),
     };
 
@@ -72,7 +73,7 @@ class ApiClient {
     return this.request<T>(url, {
       ...options,
       method: "POST",
-      body: data ? JSON.stringify(data) : undefined,
+      body: data instanceof File ? data : (data ? JSON.stringify(data) : undefined),
     });
   }
 

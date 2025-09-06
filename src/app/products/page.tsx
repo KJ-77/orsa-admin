@@ -453,7 +453,7 @@ const ProductsPage = () => {
   const uploadImageToS3 = async (file: File) => {
     const response = await apiClient.post("/products/images/upload", file, {
       headers: {
-        "Content-Type": "image/jpeg",
+        "Content-Type": file.type, // Use the actual file type
       },
     });
 
