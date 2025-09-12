@@ -86,6 +86,11 @@ interface ImageUploadResponse {
   };
 }
 
+interface ImageRecordResponse {
+  id: number;
+  imageId?: number;
+}
+
 // Zod schema for image record creation
 const imageRecordSchema = z.object({
   product_id: z.number().int().positive(),
@@ -135,6 +140,11 @@ const ProductsPage = () => {
     is_primary: false,
   });
   const [showAddImageForm, setShowAddImageForm] = useState(false);
+
+  // Edit image upload state
+  const [editSelectedImages, setEditSelectedImages] = useState<File[]>([]);
+  const [editImagePreviews, setEditImagePreviews] = useState<string[]>([]);
+  const [editUploadProgress, setEditUploadProgress] = useState<string>("");
 
   // Add Product form
   const addProductForm = useForm<z.infer<typeof productSchema>>({
@@ -241,7 +251,7 @@ const ProductsPage = () => {
         price: editForm.price,
         quantity: editForm.quantity,
         description: editForm.description,
-      });      // Update local state with new product data and images
+      }); // Update local state with new product data and images
       const primaryImage =
         editingImages.find((img) => img.is_primary)?.image_url ||
         editingImages[0]?.image_url ||
@@ -287,6 +297,12 @@ const ProductsPage = () => {
       display_order: (product.images?.length || 0) + 1,
       is_primary: (product.images?.length || 0) === 0,
     });
+
+    // Clear upload state
+    setEditSelectedImages([]);
+    setEditImagePreviews([]);
+    setEditUploadProgress("");
+
     setEditDialogOpen(true);
   };
   // Open delete dialog
@@ -410,6 +426,113 @@ const ProductsPage = () => {
     }
   };
 
+  // Edit image upload functions
+  const handleEditImageSelect = (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const files = Array.from(event.target.files || []);
+    if (files.length === 0) return;
+
+    // Validate file types
+    const validTypes = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
+    const validFiles = files.filter((file) => validTypes.includes(file.type));
+
+    if (validFiles.length !== files.length) {
+      toast.error("Only JPEG, PNG, and WebP images are allowed");
+      return;
+    }
+
+    // Validate file sizes (5MB limit per file)
+    const maxSize = 5 * 1024 * 1024; // 5MB in bytes
+    const oversizedFiles = validFiles.filter((file) => file.size > maxSize);
+
+    if (oversizedFiles.length > 0) {
+      toast.error(`Some files are too large. Maximum size is 5MB per image.`);
+      return;
+    }
+
+    setEditSelectedImages((prev) => [...prev, ...validFiles]);
+
+    // Create previews
+    validFiles.forEach((file) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setEditImagePreviews((prev) => [...prev, e.target?.result as string]);
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const removeEditImage = (index: number) => {
+    setEditSelectedImages((prev) => prev.filter((_, i) => i !== index));
+    setEditImagePreviews((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const uploadNewImagesToProduct = async () => {
+    if (!productToEdit || editSelectedImages.length === 0) return;
+
+    setEditUploadProgress("Uploading new images...");
+
+    try {
+      for (let i = 0; i < editSelectedImages.length; i++) {
+        setEditUploadProgress(
+          `Uploading image ${i + 1} of ${editSelectedImages.length}...`
+        );
+
+        // Upload to S3
+        const imageData = (await uploadImageToS3(
+          editSelectedImages[i]
+        )) as ImageUploadResponse;
+
+        console.log("Image uploaded to S3:", imageData);
+
+        // Save record to database
+        const newOrder = editingImages.length + i + 1;
+        const newImage = await saveImageRecord(
+          productToEdit.id,
+          imageData,
+          newOrder,
+          false // Not primary by default
+        );
+
+        console.log("Image record saved:", newImage);
+
+        // Update local state
+        setEditingImages((prev) => [...prev, newImage]);
+      }
+
+      // Clear upload state
+      setEditSelectedImages([]);
+      setEditImagePreviews([]);
+      setEditUploadProgress("");
+
+      toast.success("New images uploaded successfully!");
+
+      // Refresh the editing images to get the latest data from server
+      if (productToEdit) {
+        try {
+          const imageResponse = await apiClient.get(
+            `/products/${productToEdit.id}/images`
+          );
+          const imageData = imageResponse.data as
+            | ProductImage[]
+            | { images?: ProductImage[] };
+          const images = Array.isArray(imageData)
+            ? imageData
+            : imageData.images || [];
+          setEditingImages(images);
+        } catch (refreshError) {
+          console.error("Error refreshing images:", refreshError);
+          // Continue with local state if refresh fails
+        }
+      }
+    } catch (error) {
+      console.error("Error uploading new images:", error);
+      toast.error("Failed to upload new images");
+      setEditUploadProgress("");
+    }
+  };
+
   // Add Product functions
   const handleImageSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files || []);
@@ -485,7 +608,22 @@ const ProductsPage = () => {
       "/products/images/record",
       requestBody
     );
-    return response.data;
+
+    console.log("API Response for image record:", response.data);
+
+    // Return the complete image object with id
+    const responseData = response.data as ImageRecordResponse;
+
+    // Generate a temporary ID if none is provided by the API
+    const imageId = responseData.id || responseData.imageId || Date.now();
+
+    return {
+      id: imageId,
+      image_url: imageData.image.url,
+      image_key: imageData.image.key,
+      display_order: displayOrder,
+      is_primary: isPrimary,
+    } as ProductImage;
   };
 
   const deleteProduct = async (productId: number) => {
@@ -835,6 +973,67 @@ const ProductsPage = () => {
                   Add Image
                 </Button>
               </div>
+
+              {/* File Upload Section */}
+              <div className="space-y-4">
+                <Label>Upload New Images</Label>
+                <div className="flex items-center justify-center w-full">
+                  <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100">
+                    <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                      <Upload className="w-8 h-8 mb-2 text-gray-500" />
+                      <p className="mb-2 text-sm text-gray-500">
+                        <span className="font-semibold">Click to upload</span>{" "}
+                        new images
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        PNG, JPG, JPEG, WebP (MAX. 5MB each)
+                      </p>
+                    </div>
+                    <input
+                      type="file"
+                      multiple
+                      accept="image/jpeg,image/jpg,image/png,image/webp"
+                      onChange={handleEditImageSelect}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+              </div>
+
+              {/* New Images Preview */}
+              {editImagePreviews.length > 0 && (
+                <div className="space-y-3">
+                  <Label>New Images to Upload</Label>
+                  <div className="grid grid-cols-2 gap-3">
+                    {editImagePreviews.map((preview, index) => (
+                      <div key={index} className="relative group">
+                        <div className="relative rounded-lg overflow-hidden border-2 border-gray-200">
+                          <img
+                            src={preview}
+                            alt={`New image ${index + 1}`}
+                            className="w-full h-20 object-cover"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => removeEditImage(index)}
+                            className="absolute top-1 right-1 bg-red-500 hover:bg-red-600 text-white rounded-full p-1"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <Button
+                    type="button"
+                    onClick={uploadNewImagesToProduct}
+                    disabled={submitting || editSelectedImages.length === 0}
+                    size="sm"
+                  >
+                    {editUploadProgress || "Upload Selected Images"}
+                  </Button>
+                </div>
+              )}
 
               {/* Add Image Form */}
               {showAddImageForm && (
