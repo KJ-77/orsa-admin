@@ -1,5 +1,21 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## Features
+
+### Order Management System
+
+- **Interactive Data Table**: View all orders with sorting, filtering, and pagination
+- **Order Details Page**: Click on any order row to view comprehensive order information
+- **Order Items Display**: See detailed breakdown of products, quantities, and pricing
+- **Dynamic Routing**: Navigate to `/dashboard/orders/{id}` for specific order details
+- **Responsive Design**: Optimized for both desktop and mobile viewing
+
+### Key Components
+
+- `DataTable`: Interactive table with drag-and-drop, filtering, and row actions
+- `OrderDetails`: Comprehensive order view with customer info and item breakdown
+- Dynamic routing with Next.js 15 App Router
+
 ## Getting Started
 
 First, run the development server:

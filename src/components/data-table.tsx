@@ -15,6 +15,7 @@
 "use client"; // Marks this as a Client Component in Next.js
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 
 // Import drag and drop functionality from @dnd-kit/core
 // This allows for interactive row reordering
@@ -623,21 +624,40 @@ const createColumns = (
 // This component wraps each table row with drag-and-drop functionality
 // It applies the necessary CSS transforms when a row is being dragged
 function DraggableRow({ row }: { row: Row<z.infer<typeof schema>> }) {
+  const router = useRouter();
+
   // Get drag-and-drop functionality from useSortable hook
   const { transform, transition, setNodeRef, isDragging } = useSortable({
     id: row.original.id,
   });
+
+  const handleRowClick = (e: React.MouseEvent) => {
+    // Don't navigate if the user is interacting with buttons/dropdowns in the row
+    const target = e.target as HTMLElement;
+    if (
+      target.closest("button") ||
+      target.closest('[role="button"]') ||
+      target.closest("[data-radix-collection-item]")
+    ) {
+      return;
+    }
+
+    // Navigate to the order details page
+    router.push(`/dashboard/orders/${row.original.id}`);
+  };
 
   return (
     <TableRow
       data-state={row.getIsSelected() && "selected"} // Apply styling when row is selected
       data-dragging={isDragging} // Apply styling during drag operation
       ref={setNodeRef} // Connect to the sortable library
-      className="relative z-0 data-[dragging=true]:z-10 data-[dragging=true]:opacity-80"
+      className="relative z-0 data-[dragging=true]:z-10 data-[dragging=true]:opacity-80 cursor-pointer hover:bg-muted/50 transition-colors group"
       style={{
         transform: CSS.Transform.toString(transform), // Apply transformation during drag
         transition: transition, // Smooth transition animation
       }}
+      onClick={handleRowClick}
+      title="Click to view order details"
     >
       {/* Render each cell in the row */}
       {row.getVisibleCells().map((cell) => (
