@@ -10,6 +10,7 @@ import {
   IconMail,
   IconUser,
   IconPackage,
+  IconKey,
   IconShoppingCart,
 } from "@tabler/icons-react";
 import { toast } from "sonner";
@@ -328,12 +329,12 @@ export function OrderDetails({ orderId }: OrderDetailsProps) {
             </div>
 
             <div className="flex items-center gap-3">
-              <IconPackage className="h-4 w-4 text-muted-foreground" />
+              <IconKey className="h-4 w-4 text-muted-foreground" />
               <div>
                 <p className="font-medium">
-                  {order_items.length} item{order_items.length !== 1 ? "s" : ""}
+                  {order.stripe_id}
                 </p>
-                <p className="text-sm text-muted-foreground">Items Ordered</p>
+                <p className="text-sm text-muted-foreground">Stripe Transaction ID</p>
               </div>
             </div>
           </CardContent>
