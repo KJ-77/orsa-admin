@@ -13,6 +13,8 @@ import {
   signOut,
   fetchAuthSession,
   confirmSignIn,
+  resetPassword,
+  confirmResetPassword,
 } from "aws-amplify/auth";
 
 interface User {
@@ -30,6 +32,12 @@ interface AuthContextType {
   getAuthToken: () => Promise<string | null>;
   completeNewPassword: (newPassword: string) => Promise<void>;
   needsPasswordChange: boolean;
+  forgotPassword: (email: string) => Promise<void>;
+  resetPasswordConfirm: (
+    email: string,
+    code: string,
+    newPassword: string
+  ) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -189,6 +197,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return null;
     }
   };
+
+  const forgotPassword = async (email: string) => {
+    try {
+      await resetPassword({ username: email });
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : "Failed to send reset code";
+      throw new Error(message);
+    }
+  };
+
+  const resetPasswordConfirm = async (
+    email: string,
+    code: string,
+    newPassword: string
+  ) => {
+    try {
+      await confirmResetPassword({
+        username: email,
+        confirmationCode: code,
+        newPassword: newPassword,
+      });
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : "Failed to reset password";
+      throw new Error(message);
+    }
+  };
+
   const value = {
     user,
     isLoading,
@@ -198,6 +235,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     getAuthToken,
     completeNewPassword,
     needsPasswordChange,
+    forgotPassword,
+    resetPasswordConfirm,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

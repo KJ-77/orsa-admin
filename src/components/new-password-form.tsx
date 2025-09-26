@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
+import { useLogoutConfirmation } from "@/components/logout-confirmation-dialog";
 
 interface NewPasswordFormProps extends React.ComponentProps<"div"> {
   className?: string;
@@ -24,6 +25,8 @@ export function NewPasswordForm({ className, ...props }: NewPasswordFormProps) {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const { completeNewPassword, logout } = useAuth();
+  const { showConfirmation, LogoutConfirmationDialog } =
+    useLogoutConfirmation();
 
   const handleBackToLogin = async () => {
     try {
@@ -31,6 +34,10 @@ export function NewPasswordForm({ className, ...props }: NewPasswordFormProps) {
     } catch (error) {
       console.error("Logout error:", error);
     }
+  };
+
+  const handleBackToLoginClick = () => {
+    showConfirmation(handleBackToLogin);
   };
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -113,7 +120,7 @@ export function NewPasswordForm({ className, ...props }: NewPasswordFormProps) {
                 type="button"
                 variant="outline"
                 className="w-full"
-                onClick={handleBackToLogin}
+                onClick={handleBackToLoginClick}
                 disabled={loading}
               >
                 Back to Login
@@ -122,6 +129,7 @@ export function NewPasswordForm({ className, ...props }: NewPasswordFormProps) {
           </form>
         </CardContent>
       </Card>
+      <LogoutConfirmationDialog />
     </div>
   );
 }

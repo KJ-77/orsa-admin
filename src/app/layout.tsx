@@ -17,6 +17,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useLogoutConfirmation } from "@/components/logout-confirmation-dialog";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -65,6 +66,8 @@ function ModeToggle() {
 function Header() {
   const { user, logout } = useAuth();
   const router = useRouter();
+  const { showConfirmation, LogoutConfirmationDialog } =
+    useLogoutConfirmation();
 
   const handleSignOut = async () => {
     try {
@@ -73,6 +76,10 @@ function Header() {
     } catch (error) {
       console.error("Error signing out:", error);
     }
+  };
+
+  const handleLogoutClick = () => {
+    showConfirmation(handleSignOut);
   };
 
   return (
@@ -91,7 +98,7 @@ function Header() {
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={handleSignOut}
+                onClick={handleLogoutClick}
                 title="Sign out"
               >
                 <LogOut className="h-[1.2rem] w-[1.2rem]" />
@@ -102,6 +109,7 @@ function Header() {
           <ModeToggle />
         </div>
       </div>
+      <LogoutConfirmationDialog />
     </header>
   );
 }

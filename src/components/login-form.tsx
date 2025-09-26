@@ -12,8 +12,9 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/contexts/auth-context";
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 
 export function LoginForm({
   className,
@@ -23,7 +24,19 @@ export function LoginForm({
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+  // Check for password reset success message
+  useEffect(() => {
+    const passwordReset = searchParams?.get("passwordReset");
+    if (passwordReset === "success") {
+      setSuccessMessage(
+        "Password reset successfully! You can now log in with your new password."
+      );
+    }
+  }, [searchParams, setSuccessMessage]);
 
   // Redirect if already authenticated
   if (isAuthenticated) {
@@ -59,6 +72,11 @@ export function LoginForm({
                   {error}
                 </div>
               )}
+              {successMessage && (
+                <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-md text-sm">
+                  {successMessage}
+                </div>
+              )}
               <div className="grid gap-3">
                 <Label htmlFor="email">Email</Label>
                 <Input
@@ -73,12 +91,12 @@ export function LoginForm({
               <div className="grid gap-3">
                 <div className="flex items-center">
                   <Label htmlFor="password">Password</Label>
-                  <a
-                    href="#"
+                  <Link
+                    href="/forgot-password"
                     className="ml-auto inline-block text-sm underline-offset-4 hover:underline"
                   >
                     Forgot your password?
-                  </a>
+                  </Link>
                 </div>
                 <Input
                   id="password"
