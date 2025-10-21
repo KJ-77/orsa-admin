@@ -43,8 +43,8 @@ interface OrderItem {
   unit_price: string; // API returns as string
   quantity: number;
   total_price: string; // API returns as string
-  product_id: number;
-  product_description?: string;
+  product_id: number | null;
+  product_description?: string | null;
 }
 
 // Internal structure for component state
@@ -204,15 +204,15 @@ export function OrderDetails({ orderId }: OrderDetailsProps) {
     return (
       <div className="px-4 lg:px-6">
         <div className="mb-6">
-            <Button
+          <Button
             variant="ghost"
             size="sm"
             onClick={() => router.push("/dashboard")}
             className="mb-4"
-            >
+          >
             <IconArrowLeft className="mr-2 h-4 w-4" />
             Back to Dashboard
-            </Button>
+          </Button>
         </div>
         <Card>
           <CardContent className="flex items-center justify-center py-12">
@@ -331,10 +331,10 @@ export function OrderDetails({ orderId }: OrderDetailsProps) {
             <div className="flex items-center gap-3">
               <IconKey className="h-4 w-4 text-muted-foreground" />
               <div>
-                <p className="font-medium">
-                  {order.stripe_id}
+                <p className="font-medium">{order.stripe_id}</p>
+                <p className="text-sm text-muted-foreground">
+                  Stripe Transaction ID
                 </p>
-                <p className="text-sm text-muted-foreground">Stripe Transaction ID</p>
               </div>
             </div>
           </CardContent>
@@ -363,9 +363,19 @@ export function OrderDetails({ orderId }: OrderDetailsProps) {
                 <div key={item.id}>
                   <div className="flex items-center justify-between py-4">
                     <div className="flex-1">
-                      <h4 className="font-medium text-lg">
-                        {item.product_name}
-                      </h4>
+                      <div className="flex items-center gap-2">
+                        <h4 className="font-medium text-lg">
+                          {item.product_name || "Unknown Product"}
+                        </h4>
+                        {item.product_id === null && (
+                          <Badge
+                            variant="outline"
+                            className="text-xs bg-gray-100 text-gray-600 border-gray-300"
+                          >
+                            Product Deleted
+                          </Badge>
+                        )}
+                      </div>
                       {item.product_description && (
                         <p className="text-sm text-muted-foreground mt-1">
                           {item.product_description}
@@ -374,6 +384,11 @@ export function OrderDetails({ orderId }: OrderDetailsProps) {
                       <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground">
                         <span>Unit Price: {formatPrice(item.unit_price)}</span>
                         <span>Quantity: {item.quantity}</span>
+                        {item.product_id === null && (
+                          <span className="text-xs italic text-gray-500">
+                            (Historical record)
+                          </span>
+                        )}
                       </div>
                     </div>
                     <div className="text-right">
